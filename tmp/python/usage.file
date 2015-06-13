@@ -1,0 +1,2 @@
+./protoc ./echo.proto --cpp_out=./
+./protoc ./echo.proto --python_out=./
