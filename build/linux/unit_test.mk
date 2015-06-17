@@ -28,6 +28,8 @@ LIBS		:= \
 	-llog4cplus \
 	-levent_core \
 	-lprotobuf \
+	-lmysqlclient_r \
+	-lhiredis \
 	-lrt
 
 #ifeq (YES, $(DEBUG))
@@ -42,6 +44,7 @@ LIBS		:= \
 #endif
 
 LDFLAGS		:= \
+	-L/usr/lib64/mysql \
 	-L$(LIBDIR) \
 	$(LIBS)
 
