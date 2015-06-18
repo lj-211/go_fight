@@ -1,0 +1,12 @@
+*.o
+*.log
+*.swl
+*.swm
+*.swn
+*.swo
+*.swp
+*.process
+*.process_d
+tags
+build/linux/.obj/
+build/linux/.dep/
