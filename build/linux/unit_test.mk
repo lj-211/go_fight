@@ -2,7 +2,7 @@
 ###########################################################
 
 PROJECT		:= unit_test
-TARGET		:= unit_test
+TARGET		:= unit_test.process
 ROOTDIR		:= ../..
 OUTDIR		:= $(ROOTDIR)/bin/$(PROJECT)
 INCDIR		:= $(ROOTDIR)/src/
