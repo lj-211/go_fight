@@ -88,7 +88,7 @@ endif
 rebuild: clean all tags
 
 $(TARGET): $(OBJS_C) $(OBJS_CPP)
-	$(LD) -o $@ $(OBJS_C) $(OBJS_CPP) $(CPPFLAGS) $(LDFLAGS) "-Wl,-rpath,../lib"
+	$(LD) -o $@ $(STATIC_LIBS) $(OBJS_C) $(OBJS_CPP) $(CPPFLAGS) $(LDFLAGS) "-Wl,-rpath,../lib"
 	@echo
 	@echo Compile/Link '$(TARGET)' ... OK
 	@echo

@@ -30,7 +30,9 @@ LIBS		:= \
 	-lprotobuf \
 	-lmysqlclient_r \
 	-lhiredis \
+	-llua \
 	-lrt
+STATIC_LIBS := $(ROOTDIR)/lib/liblua.a
 
 #ifeq (YES, $(DEBUG))
 #	LIBS	+= \
