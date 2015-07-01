@@ -1,6 +1,7 @@
 #ifndef GO_DEFINE_H
 #define G0_DEFINE_H
 
+#include "memory/mem_define.h"
 #include "memory/memory_dependency.h"
 
 #define DISALLOW_COPY_AND_ASSIGN(T) \

@@ -1,6 +1,6 @@
 #include "str_util.h"
 
-#include <string>
+#include <sstream>
 
 namespace {
 const std::string s_blank = "";
@@ -15,6 +15,12 @@ const char* Blank() {
 
 const std::string& BlankStr() {
 	return s_blank;
+}
+
+std::string int_to_str(int val) {
+	std::stringstream ss;
+	ss << val;
+	return ss.str();
 }
 
 }

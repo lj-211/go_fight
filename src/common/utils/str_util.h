@@ -10,6 +10,8 @@ const char* Blank();
 
 const std::string& BlankStr();
 
+std::string int_to_str(int val);
+
 }
 }
 
