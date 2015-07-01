@@ -5,6 +5,7 @@ bool test_memory();
 bool test_net();
 bool test_database();
 bool test_use_redis_for_config();
+bool test_lua_load_config();
 
 int main() {
 	printf("process: unit_test\n");
@@ -25,8 +26,12 @@ int main() {
 		printf("%s", "测试数据库模块错误");
 	}
 
-	if (!test_use_redis_for_config()) {
+	if (false && !test_use_redis_for_config()) {
 		printf("%s", "测试redis数据库作为配置错误");
+	}
+
+	if (!test_lua_load_config()) {
+		printf("%s", "测试lua模块错误");
 	}
 
 	return 0;
