@@ -52,6 +52,6 @@ private:
 	DISALLOW_COPY_AND_ASSIGN(AutoLockMutex);
 };
 
-};
+} // end namespace thread
 
 #endif

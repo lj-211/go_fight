@@ -37,7 +37,7 @@ const char* s_net_log_prefix = "[net]";
 int ES_INIT_FAIL = 1024;
 
 struct event_base* s_main_base = NULL;
-struct event* s_main_event = NULL;
+//struct event* s_main_event = NULL;
 net::AcceptThread s_accept_thread_info;
 
 pthread_t s_last_thread_id = -1;
@@ -54,6 +54,10 @@ GlobalNetStat s_gns_stat;
 thread::Mutex s_conns_map_lock;
 MAP(int, net::Connection*) s_conns_map;
 
+thread::Mutex s_connect_conns_lock;
+LIST(net::ConnInfo*) s_connect_conns;
+connector_fail_callback s_cntor_callback = NULL;
+
 MAP(pthread_t, net::ThreadData*) s_threads_datas;
 
 // 网络参数
@@ -65,7 +69,7 @@ log_error_raw net_log_error;
 log_trace_raw net_log_trace;
 
 pthread_cond_t s_init_cond;
-int s_thread_num = 4;
+//int s_thread_num = 4;
 int s_init_count = 0;
 thread::Mutex s_init_lock;
 
@@ -80,7 +84,7 @@ void deinit_internal_parameter() {
 // master线程等待所有线程初始化完成
 void wait_for_thread_init() {
 	s_init_lock.Hold();
-	while (s_init_count < s_thread_num) {
+	while (s_init_count < s_net_setting.net_thread_num_) {
 		pthread_cond_wait(&s_init_cond, &s_init_lock.GetMutex());
 	}
 	s_init_lock.Release();
@@ -102,7 +106,45 @@ struct ConnInfo {
 	int event_flag_;
 	enum net::ConnState state_;
 	PeerInfo peer_info_;
+	Connection* pre_new;
+	
+	ConnInfo()
+		: pre_new(NULL) {
+	}
 };
+
+void regist_connector_callback(connector_fail_callback cb) {
+	s_cntor_callback = cb;
+}
+
+bool push_worker_new_conn(ConnInfo* ci) {
+	do {
+		if (ci->pre_new == NULL) {
+			break;
+		}
+
+		int _thread_idx = (s_last_thread_id + 1) % s_net_setting.net_thread_num_;
+		s_last_thread_id = _thread_idx;
+		ThreadData* _td = s_threads_datas[_thread_idx];
+		// 在初始化的时候已经保障了基本数据准确,这里不需要检查指针
+		//_td->id_ = _thread_idx;
+		_td->new_connections_.Push(ci);
+
+		char buf[1];
+		buf[0] = 'c';
+		if (write(_td->notify_send_fd_, buf, 1) != 1) {
+			if (net_log_error) {
+				net_log_error(__FILE__, __LINE__, 
+					"[net]通知worker线程新发起连接失败,socket id为: %d", 
+					ci->sfd_);
+			}
+		}
+
+		return true;
+	} while (false);
+
+	return false;
+}
 
 bool give_worker_new_conn(int sfd, const sockaddr_in& addr, ConnState conn_state, int evt_flag) {
 	do {
@@ -117,7 +159,7 @@ bool give_worker_new_conn(int sfd, const sockaddr_in& addr, ConnState conn_state
 		_ci->peer_info_.port_ = ntohs(addr.sin_port); 
 		strncpy(_ci->peer_info_.ip_, inet_ntoa(addr.sin_addr), 32);
 
-		int _thread_idx = (s_last_thread_id + 1) % s_thread_num;
+		int _thread_idx = (s_last_thread_id + 1) % s_net_setting.net_thread_num_;
 		s_last_thread_id = _thread_idx;
 		ThreadData* _td = s_threads_datas[_thread_idx];
 		// 在初始化的时候已经保障了基本数据准确,这里不需要检查指针
@@ -446,7 +488,7 @@ int new_socket_nonblock() {
 	return sfd;
 }
 
-Connection* create_conn(const int sfd, ConnState conn_state, event_base* ebase);
+Connection* create_conn(const int sfd, ConnState conn_state, event_base* ebase, Connection* pre_new);
 int server_listen(const char* addr_str, int port) {
 	int sfd = new_socket_nonblock();
 	if (sfd == -1) {
@@ -495,7 +537,7 @@ int server_listen(const char* addr_str, int port) {
 			}
 
 			// 创建连接数据结构
-			Connection* conn = create_conn(sfd, CS_LISTEN, s_accept_thread_info.base_);
+			Connection* conn = create_conn(sfd, CS_LISTEN, s_accept_thread_info.base_, NULL);
 			if (conn == NULL) {
 				if (net_log_error) {
 					net_log_error(__FILE__, __LINE__, "[net]创建监听连接失败,退出程序.");
@@ -515,7 +557,7 @@ int server_listen(const char* addr_str, int port) {
 	return sfd;
 }
 
-Connection* create_conn(const int sfd, ConnState conn_state, event_base* ebase) {
+Connection* create_conn(const int sfd, ConnState conn_state, event_base* ebase, Connection* pre_new) {
 	Connection* _ret = NULL;
 
 	do {
@@ -547,7 +589,11 @@ Connection* create_conn(const int sfd, ConnState conn_state, event_base* ebase) 
 		}
 
 
-		_ret = GO_NEW(Connection);
+		if (pre_new == NULL) {
+			_ret = GO_NEW(Connection);
+		} else {
+			_ret = pre_new;
+		}
 		init_connection(_ret);
 
 		// set attribute
@@ -606,12 +652,17 @@ Connection* create_conn(const int sfd, ConnState conn_state, event_base* ebase) 
 	if (_ret) {
 		if (_ret->sfd_dup_for_write_ != -1) {
 			close(_ret->sfd_dup_for_write_);
+			_ret->sfd_dup_for_write_ = -1;
 		}
 		if (_ret->sfd_ != -1) {
 			close(_ret->sfd_);
+			_ret->sfd_ = -1;
 		}
 		clear_connection(_ret);
-		GO_DELETE(_ret, Connection);
+		// 不是预分配的连接,由外面负责释放
+		if (pre_new == NULL) {
+			GO_DELETE(_ret, Connection);
+		}
 		_ret = NULL;
 	}
 
@@ -673,7 +724,7 @@ void* accept_thread_worker(void* ptr) {
 		exit(ES_INIT_FAIL);
 	}
 	// 1. 初始化数据处理线程任务
-	thread_init(s_thread_num, s_main_base);
+	thread_init(s_net_setting.net_thread_num_, s_main_base);
 	// 2. 等待处理数据线程初始化
 	wait_for_thread_init();
 	// 3. 进入主事件循环
@@ -744,12 +795,33 @@ void* data_thread_worker(void* ptr) {
 					tmp_conn->conn_read_msgs_.pop_front();
 					td->td_read_msgs_lock_.Release();
 				}
-
 				++msg_iter;
 			}
 		}
 
-		// 1. 处理依然是可读状态fd
+		// 1. 处理connector
+		{
+			thread::AutoLockMutex tmp(&s_connect_conns_lock);
+			LIST(ConnInfo*)::iterator new_conn_iter = s_connect_conns.begin();
+			while (new_conn_iter != s_connect_conns.end()) {
+				ConnInfo* ci = *new_conn_iter;
+				if (false == push_worker_new_conn(ci)) {
+					if (s_cntor_callback) {
+						s_cntor_callback((uint64_t)ci->pre_new, false);
+					}
+
+					GO_DELETE(ci->pre_new, Connection);
+					GO_DELETE(ci, ConnInfo);
+					close(ci->sfd_);
+					return 0;
+				}
+
+				s_connect_conns.erase(new_conn_iter);
+				new_conn_iter = s_connect_conns.begin();
+			}
+		}
+
+		// 2. 处理依然是可读状态fd
 		MAP(uint64_t, Connection*)::iterator io_iter = td->thread_connections_.begin();
 		while (io_iter != td->thread_connections_.end()) {
 			Connection* tmp_conn = io_iter->second;
@@ -764,13 +836,23 @@ void* data_thread_worker(void* ptr) {
 			}
 			++io_iter;
 		}
-		// 2. epoll_wait
+		// 3. epoll_wait
 		event_base_loop(td->event_, EVLOOP_ONCE | EVLOOP_NONBLOCK);
-		// 3. 处理异常连接
+		// 4. 处理异常连接
 		VECTOR(uint64_t) remove_ids;
 		MAP(uint64_t, Connection*)::iterator tc_iter = td->thread_connections_.begin();
 		while (tc_iter != td->thread_connections_.end()) {
 			if (conn_get_state(tc_iter->second) == CS_CLOSE) {
+				// 给断开的连接增加一个连接断开消息
+				MsgNode* msg_node = GO_NEW(MsgNode);
+				msg_node->msg_type_ = 0;
+				msg_node->msg_conn_ = tc_iter->second;
+				td->td_read_msgs_lock_.Hold();
+				td->td_read_msgs_.push_back(msg_node);
+				td->td_read_msgs_lock_.Release();
+				// 立即关闭并清理连接数据,但是保留Connection对象
+				conn_internal_close(tc_iter->second);
+
 				remove_ids.push_back(tc_iter->first);
 				td->for_delete_connections_[tc_iter->second->conn_stat_.close_time_] = tc_iter->second;
 			}
@@ -784,7 +866,7 @@ void* data_thread_worker(void* ptr) {
 		MAP(uint64_t, Connection*)::iterator delete_iter = td->for_delete_connections_.begin();
 		while (delete_iter != td->for_delete_connections_.end()) {
 			if ((now - delete_iter->second->conn_stat_.close_time_) > (2 * 60)) {
-				conn_internal_close(delete_iter->second);
+				//conn_internal_close(delete_iter->second);
 				GO_DELETE(delete_iter->second, Connection);
 			} else {
 				break;
@@ -814,28 +896,45 @@ void thread_libevent_process(int fd, short which, void *arg) {
 		ConnInfo* ci = _td->new_connections_.Pop();
 
 		do {
-			Connection* conn = create_conn(ci->sfd_, ci->state_, _td->event_);
+			Connection* conn = create_conn(ci->sfd_, ci->state_, _td->event_, ci->pre_new);
 			if (conn == NULL) {
 				if (net_log_error) {
-					net_log_error(__FILE__, __LINE__, "%s工作线程接收连接失败,socket id为%d,(ip:%s port:%d)",
+					net_log_error(__FILE__, __LINE__, 
+						"%s工作线程接收连接失败,socket id为%d,(ip:%s port:%d)",
 						s_net_log_prefix, fd, ci->peer_info_.ip_, ci->peer_info_.port_);
 				}
-				close(ci->sfd_);
+				if (ci->sfd_ != -1) {
+					close(ci->sfd_);
+				}
 				break;
 			}
 			if (_td->thread_connections_.find(ci->sfd_) != _td->thread_connections_.end()) {
 				if (net_log_error) {
-					net_log_error(__FILE__, __LINE__, "%ssocket文件描述符已存在线程队列中,socket id为%d,(ip:%s port:%d)",
+					net_log_error(__FILE__, __LINE__, 
+						"%ssocket文件描述符已存在线程队列中,socket id为%d,(ip:%s port:%d)",
 						s_net_log_prefix, fd, ci->peer_info_.ip_, ci->peer_info_.port_);
 				}
-				close(ci->sfd_);
+				if (ci->sfd_ != -1) {
+					close(ci->sfd_);
+				}
 				break;
 			}
 			_td->thread_connections_[(uint64_t)conn] = conn;
 			conn->td_ = _td;
 			memcpy((void*)&conn->info_, (void*)&ci->peer_info_, sizeof(PeerInfo));
+
+			if (ci->pre_new != NULL && s_cntor_callback) {
+				s_cntor_callback((uint64_t)ci->pre_new, true);
+			}
 		} while (false);
 
+		if (ci->pre_new != NULL) {
+			if (s_cntor_callback) {
+				s_cntor_callback((uint64_t)ci->pre_new, false);
+			}
+		
+			GO_DELETE(ci->pre_new, Connection);
+		}
 		GO_DELETE(ci, ConnInfo);
 	}
 }
@@ -966,6 +1065,8 @@ bool net_pre_set_parameter(NetSetting& ns) {
 		s_net_setting.ip_addr_ = ns.ip_addr_;
 		// 3. 端口
 		s_net_setting.listen_port_ = ns.listen_port_;
+		// 4. 网络线程数量
+		s_net_setting.net_thread_num_ = ns.net_thread_num_;
 		
 		s_set_parameters = true;
 
@@ -1048,8 +1149,6 @@ void conn_internal_close(Connection* conn) {
 		close(conn->sfd_);
 	}
 
-	conn_set_state(conn, CS_CLOSE);
-
 	s_gns_stat.gns_mutex_.Hold();
 	--s_gns_stat.curr_conns_;
 	s_gns_stat.gns_mutex_.Release();
@@ -1057,6 +1156,49 @@ void conn_internal_close(Connection* conn) {
 
 void conn_close(Connection* conn) {
 	conn_set_state(conn, CS_CLOSE);
+}
+
+uint64_t net_connect(const char* name, const char* ip, int port) {
+	if (s_cntor_callback == NULL) {
+		// 如果没有设置连接器回调,不允许连接
+		if (net_log_error) {
+			net_log_error(__FILE__, __LINE__, "[net]在创建主动连接前,你必须注册创建连接失败回调");
+		}
+		return 0;
+	}
+
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	struct sockaddr_in addr;
+	memset(&addr, 0, sizeof(addr));
+
+	addr.sin_family = AF_INET;
+	inet_aton(ip, &(addr.sin_addr));
+	addr.sin_port = port;
+
+	if (connect(fd, (struct sockaddr*)(&addr), sizeof(addr)) != 0) {
+		if (net_log_error) {
+			net_log_error(__FILE__, __LINE__, "[net]连接%s,ip: %s port: %d失败",
+				name, ip, port);
+		}
+		close(fd);
+
+		return 0;
+	}
+
+	Connection* new_conn = GO_NEW(Connection);	
+
+	ConnInfo* _ci = GO_NEW(ConnInfo);
+	_ci->sfd_ = fd;
+	_ci->state_ = CS_CONNECT;
+	_ci->event_flag_ = EV_READ | EV_WRITE | EV_PERSIST;
+	_ci->peer_info_.port_ = ntohs(addr.sin_port); 
+	_ci->pre_new = new_conn;
+	strncpy(_ci->peer_info_.ip_, inet_ntoa(addr.sin_addr), 32);
+
+	thread::AutoLockMutex tmp(&s_connect_conns_lock);
+	s_connect_conns.push_back(_ci);
+
+	return (uint64_t)new_conn;
 }
 
 void get_net_msgs(DEQUE(MsgNode*)& output) {

@@ -13,7 +13,11 @@
 
 #include <time.h>
 
+typedef void* (*connector_fail_callback)(uint64_t ptr, bool is_ok);
+
 namespace net {
+void regist_connector_callback(connector_fail_callback cb);
+
 typedef ::google::protobuf::Message MsgData;
 class Connection;
 
@@ -35,10 +39,12 @@ struct NetSetting {
 	int max_connections_;
 	std::string ip_addr_;
 	int listen_port_;
+	int net_thread_num_;
 
 	NetSetting() {
 		max_connections_ = 0;
 		ip_addr_ = "";
+		net_thread_num_ = 4;
 	}
 };
 
@@ -55,7 +61,8 @@ enum ConnState {
 	CS_LISTEN,
 	CS_WAITING,
 	CS_WAITING_DATA,
-	CS_CLOSE
+	CS_CLOSE,
+	CS_CONNECT
 };
 
 struct ConnStat {
@@ -152,6 +159,9 @@ struct ThreadData {
 bool net_pre_set_parameter(NetSetting& ns);
 bool net_init();
 void net_deinit();
+
+// 如果返回为0,表示连接错误
+uint64_t net_connect(const char* name, const char* ip, int port);
 
 void conn_close(Connection* conn);
 
