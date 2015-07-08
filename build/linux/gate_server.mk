@@ -20,11 +20,13 @@ CFLAGS		:= \
 	-I$(ROOTDIR)/include/libevent/include \
 	-I$(ROOTDIR)/include/libevent \
 	-I$(INCDIR)/$(PROJECT) \
-	-I$(ROOTDIR)/src/common
+	-I$(ROOTDIR)/src/common \
+	-I$(ROOTDIR)/src/protocol
 CPPFLAGS	:= \
 	-DELF_HAVE_PRAGMA_ONCE \
 	-DELF_USE_ALL
 LIBS		:= \
+	-lprotocol \
 	-llog4cplus \
 	-levent_core \
 	-lprotobuf \
@@ -34,16 +36,13 @@ LIBS		:= \
 	-lrt
 STATIC_LIBS := $(ROOTDIR)/lib/liblua.a
 
-#ifeq (YES, $(DEBUG))
-#	LIBS	+= \
-#	-lelfox_d \
-#	-lpb_d
-#else
-#	LIBS	+= \
-#	-lcjson \
-#	-lelfox \
-#	-lpb
-#endif
+ifeq (YES, $(DEBUG))
+	LIBS	+= \
+	-lprotocol_d
+else
+	LIBS	+= \
+	-lprotocol
+endif
 
 LDFLAGS		:= \
 	-L/usr/lib64/mysql \

@@ -1,5 +1,21 @@
 #include <stdio.h>
 
+struct ClassFirst {
+};
+struct ClassSecond {
+};
+
+template<class T> int GetType() {
+	return 0;
+}
+
+template<> int GetType<ClassFirst>() {
+	return 1234;
+}
+template<> int GetType<ClassSecond>() {
+	return 8888;
+}
+
 bool test_log4cplus();
 bool test_memory();
 bool test_net();
@@ -8,6 +24,11 @@ bool test_use_redis_for_config();
 bool test_lua_load_config();
 
 int main() {
+
+	printf("%d %d", GetType<ClassFirst>(), GetType<ClassSecond>());
+
+	return 0;
+
 	printf("process: unit_test\n");
 
 	if (!test_log4cplus()) {

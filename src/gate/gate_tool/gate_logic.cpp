@@ -3,6 +3,9 @@
 #include "utils/str_util.h"
 #include "net/go_net.h"
 #include "thread/thread_util.h"
+#include "utils/str_util.h"
+
+#include "protocol.h"
 
 #include "LuaBridge/LuaBridge.h"
 #include "hiredis/hiredis.h"
@@ -38,6 +41,8 @@ void regist_gate_config(lua_State* state) {
 }
 
 GateConfig s_gate_config;
+
+DEQUE(net::MsgNode*) s_recv_msgs;
 } // end namespace annoymous
 
 bool init_lua_config() {
@@ -106,7 +111,7 @@ bool init_net_config() {
 		if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
 			redis_ret->type != REDIS_REPLY_ERROR) {
 
-			s_server_port = redis_ret->integer;
+			s_server_port = util::str::str_to_int(redis_ret->str);
 			freeReplyObject(redis_ret);
 		} else {
 			init_ok = false;
@@ -177,12 +182,12 @@ bool init_config() {
 			break;
 		}
 
-		/*
 		if (init_net() == false) {
 			ERROR_LOG("%s", "初始化网络失败");
 			break;
 		}
-		*/
+
+		protocol_init();
 
 		pthread_t id;
 		thread::create_worker(id, &connect_to_gs, &s_gameser_info);
@@ -196,6 +201,19 @@ bool init_config() {
 void logic_update(time_t now, time_t delta) {
 	usleep(2000 * 1000);
 	ERROR_LOG("%s", "请注意,这是一条测试日志,请删除我...");
+
+	// 1. process msg
+	net::get_net_msgs(s_recv_msgs);	
+	if (s_recv_msgs.size() > 0) {
+		DEBUG_LOG("收到网络消息%d", s_recv_msgs.size());
+	}
+	while (s_recv_msgs.size() > 0) {
+		net::MsgNode* msg_node = s_recv_msgs.front();
+		s_recv_msgs.pop_front();
+	
+		// delete msg node in message_process
+		net::message_process(msg_node);
+	}
 }
 
 void deinit_all() {

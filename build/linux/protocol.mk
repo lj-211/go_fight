@@ -1,10 +1,10 @@
 # Project parameters
 ###########################################################
 
-PROJECT		:= game
-TARGET		:= game.process
+PROJECT		:= protocol
+TARGET		:= protocol
 ROOTDIR		:= ../..
-OUTDIR		:= $(ROOTDIR)/bin/$(PROJECT)
+OUTDIR		:= $(ROOTDIR)/bin/lib
 INCDIR		:= $(ROOTDIR)/src/
 SRCDIR		:= $(ROOTDIR)/src
 LIBDIR		:= $(ROOTDIR)/bin/lib
@@ -13,36 +13,21 @@ INSTLIBDIR	:=
 INSTINCDIR	:=
 INSTALLDIR	:=
 DEBUG		:= YES
-LIBRARY		:= NO
+LIBRARY		:= YES
 PROFILE		:= NO
 CFLAGS		:= \
 	-I$(ROOTDIR)/include \
 	-I$(ROOTDIR)/include/libevent/include \
 	-I$(ROOTDIR)/include/libevent \
 	-I$(INCDIR)/$(PROJECT) \
-	-I$(ROOTDIR)/src/common \
-	-I$(ROOTDIR)/src/protocol
+	-I$(ROOTDIR)/src/common
 CPPFLAGS	:= \
 	-DELF_HAVE_PRAGMA_ONCE \
 	-DELF_USE_ALL
 LIBS		:= \
-	-lprotocol \
-	-llog4cplus \
-	-levent_core \
 	-lprotobuf \
-	-lmysqlclient_r \
-	-lhiredis \
-	-llua \
 	-lrt
-STATIC_LIBS := $(ROOTDIR)/lib/liblua.a
-
-ifeq (YES, $(DEBUG))
-	LIBS	+= \
-	-lprotocol_d
-else
-	LIBS	+= \
-	-lprotocol
-endif
+STATIC_LIBS := 
 
 LDFLAGS		:= \
 	-L/usr/lib64/mysql \

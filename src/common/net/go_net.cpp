@@ -23,10 +23,12 @@ bool s_debug_net = true;
 struct MsgProcesser {
 	net::msg_process mp_;
 	net::new_msg_data nmd_;
+	net::delete_msg_data dmd_;
 
 	MsgProcesser()
 		: mp_(NULL),
-		nmd_(NULL) {
+		nmd_(NULL),
+		dmd_(NULL) {
 	}
 };
 
@@ -287,7 +289,8 @@ void message_format(struct evbuffer *buffer,
 				s_msg_processers.find(msg_node->msg_type_);
 			if (pro_iter == s_msg_processers.end()) {
 				// 如果是未识别的类型,则断开连接
-				conn_close(conn);
+				// tag
+				//conn_close(conn);
 				GO_DELETE(msg_node, MsgNode);
 				break;
 			}
@@ -1220,7 +1223,7 @@ namespace net {
 void init_msg_node() {
 }
 
-bool regist_msg_processer(int msg_type, new_msg_data init, msg_process mp) {
+bool regist_msg_processer(int msg_type, new_msg_data init, delete_msg_data deinit, msg_process mp) {
 	MAP(int, MsgProcesser*)::iterator iter = s_msg_processers.find(msg_type);
 	if (iter != s_msg_processers.end()) {
 		return false;
@@ -1229,6 +1232,7 @@ bool regist_msg_processer(int msg_type, new_msg_data init, msg_process mp) {
 	s_msg_processers[msg_type] = GO_NEW(MsgProcesser);
 	s_msg_processers[msg_type]->mp_ = mp;
 	s_msg_processers[msg_type]->nmd_ = init;
+	s_msg_processers[msg_type]->dmd_ = deinit;
 
 	return true;
 }
@@ -1244,9 +1248,14 @@ void message_process(MsgNode* mn) {
 			net_log_error(__FILE__, __LINE__, "[net]没有处理器的消息类型%d", mn->msg_type_);
 		}
 	} else {
-		if (mn->msg_data_ != NULL && iter->second->mp_ != NULL) {
+		if (((mn->msg_data_ != NULL || (mn->msg_data_ == NULL && mn->msg_type_ == 0)) && 
+				iter->second->mp_ != NULL)) {
 			iter->second->mp_(mn);
 		}
+		if (mn->msg_data_) {
+			iter->second->dmd_(mn->msg_data_);
+		}
+		GO_DELETE(mn, MsgNode);
 	}
 }
 } // end namespace net

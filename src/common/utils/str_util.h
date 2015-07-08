@@ -12,6 +12,8 @@ const std::string& BlankStr();
 
 std::string int_to_str(int val);
 
+int str_to_int(const char* str);
+
 }
 }
 

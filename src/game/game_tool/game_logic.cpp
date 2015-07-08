@@ -104,7 +104,7 @@ bool init_net_config() {
 		if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
 			redis_ret->type != REDIS_REPLY_ERROR) {
 
-			s_game_internal_config.game_port_ = redis_ret->integer;
+			s_game_internal_config.game_port_ = util::str::str_to_int(redis_ret->str);
 			freeReplyObject(redis_ret);
 		} else {
 			init_ok = false;
