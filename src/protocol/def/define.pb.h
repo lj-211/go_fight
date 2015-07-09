@@ -34,11 +34,13 @@ void protobuf_ShutdownFile_def_2fdefine_2eproto();
 enum MessageType {
   message_Shutdown_Req_ = 0,
   message_Shutdown_Res_ = 1,
-  message_begin_ = 20000
+  message_begin_ = 20000,
+  message_Regist_Req_ = 20001,
+  message_Regist_Res_ = 20002
 };
 bool MessageType_IsValid(int value);
 const MessageType MessageType_MIN = message_Shutdown_Req_;
-const MessageType MessageType_MAX = message_begin_;
+const MessageType MessageType_MAX = message_Regist_Res_;
 const int MessageType_ARRAYSIZE = MessageType_MAX + 1;
 
 const ::google::protobuf::EnumDescriptor* MessageType_descriptor();

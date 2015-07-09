@@ -56,9 +56,11 @@ void protobuf_AddDesc_def_2fdefine_2eproto() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   ::google::protobuf::DescriptorPool::InternalAddGeneratedFile(
-    "\n\020def/define.proto*Y\n\013MessageType\022\031\n\025mes"
-    "sage_Shutdown_Req_\020\000\022\031\n\025message_Shutdown"
-    "_Res_\020\001\022\024\n\016message_begin_\020\240\234\001", 109);
+    "\n\020def/define.proto*\217\001\n\013MessageType\022\031\n\025me"
+    "ssage_Shutdown_Req_\020\000\022\031\n\025message_Shutdow"
+    "n_Res_\020\001\022\024\n\016message_begin_\020\240\234\001\022\031\n\023messag"
+    "e_Regist_Req_\020\241\234\001\022\031\n\023message_Regist_Res_"
+    "\020\242\234\001", 164);
   ::google::protobuf::MessageFactory::InternalRegisterGeneratedFile(
     "def/define.proto", &protobuf_RegisterTypes);
   ::google::protobuf::internal::OnShutdown(&protobuf_ShutdownFile_def_2fdefine_2eproto);
@@ -79,6 +81,8 @@ bool MessageType_IsValid(int value) {
     case 0:
     case 1:
     case 20000:
+    case 20001:
+    case 20002:
       return true;
     default:
       return false;

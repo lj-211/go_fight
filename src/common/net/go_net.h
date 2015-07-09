@@ -158,6 +158,8 @@ struct ThreadData {
 
 bool net_pre_set_parameter(NetSetting& ns);
 bool net_init();
+MsgNode* get_msgnode(int type);
+void net_send(uint64_t id, MsgNode* md);
 void net_deinit();
 
 // 如果返回为0,表示连接错误

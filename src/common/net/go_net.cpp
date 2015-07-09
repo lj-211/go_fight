@@ -386,7 +386,7 @@ void on_write(Connection* conn) {
 		// 1. 写入消息类型
 		*((int*)buf) = msg_node->msg_type_;
 		// 2. 写入消息长度
-		*((int*)buf+4) = msg_data_size;
+		*((int*)((char*)buf+4)) = msg_data_size;
 		// 3. 写入消息内容
 		msg_node->msg_data_->SerializeToArray(buf+8, msg_data_size);
 		evbuffer_add_reference(conn->write_buffer_, buf, msg_data_size+8, free_msg_buf, NULL);
@@ -772,9 +772,21 @@ void* data_thread_worker(void* ptr) {
 				td->thread_connections_.find(key);
 			if (conn_iter == td->thread_connections_.end() || conn_iter->second == NULL) {
 				if (net_log_error) {
-					net_log_error(__FILE__, __LINE__, "[net]消息的连接失效,消息类型%d", 
+					net_log_error(__FILE__, __LINE__, "[net]查找消息的连接失效,消息类型%d", 
 						msg_node->msg_type_);
 				}
+				// todo 释放MsgNode
+				MAP(int, MsgProcesser*)::iterator iter = s_msg_processers.find(msg_node->msg_type_);
+				if (iter != s_msg_processers.end()) {
+					if (msg_node->msg_data_) {
+						iter->second->dmd_(msg_node->msg_data_);
+					}
+				} else {
+					if (net_log_error) {
+						net_log_error(__FILE__, __LINE__, "未知的消息类型%d,无法释放,存在内存泄露", msg_node->msg_type_);
+					}
+				}
+				GO_DELETE(msg_node, MsgNode);
 				continue;
 			}
 
@@ -929,6 +941,8 @@ void thread_libevent_process(int fd, short which, void *arg) {
 			if (ci->pre_new != NULL && s_cntor_callback) {
 				s_cntor_callback((uint64_t)ci->pre_new, true);
 			}
+
+			return;
 		} while (false);
 
 		if (ci->pre_new != NULL) {
@@ -1123,6 +1137,32 @@ bool net_init() {
 	return false;
 }
 
+MsgNode* get_msgnode(int type) {
+	MAP(int, MsgProcesser*)::iterator iter = s_msg_processers.find(type);
+	if (iter == s_msg_processers.end()) {
+		return NULL;
+	}
+
+	MsgNode* ret = GO_NEW(MsgNode);
+	ret->msg_type_ = type;
+	ret->msg_data_ = iter->second->nmd_();
+
+	return ret;
+}
+
+void net_send(uint64_t id, MsgNode* md) {
+	if (md == NULL || md->msg_conn_ == NULL) {
+		return;
+	}
+
+	Connection* conn = md->msg_conn_;
+	ThreadData* td = conn->td_;
+	{
+		thread::AutoLockMutex tmp(&td->write_msgs_lock_);
+		td->td_write_msgs_.push_back(md);
+	}
+}
+
 void net_deinit() {
 }
 
@@ -1176,12 +1216,12 @@ uint64_t net_connect(const char* name, const char* ip, int port) {
 
 	addr.sin_family = AF_INET;
 	inet_aton(ip, &(addr.sin_addr));
-	addr.sin_port = port;
+	addr.sin_port = htons(port);
 
 	if (connect(fd, (struct sockaddr*)(&addr), sizeof(addr)) != 0) {
 		if (net_log_error) {
-			net_log_error(__FILE__, __LINE__, "[net]连接%s,ip: %s port: %d失败",
-				name, ip, port);
+			net_log_error(__FILE__, __LINE__, "[net]连接%s,ip: %s port: %d失败 原因: %s",
+				name, ip, port, strerror(errno));
 		}
 		close(fd);
 

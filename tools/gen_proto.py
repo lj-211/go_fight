@@ -38,10 +38,25 @@ def gen_proto_code(file_name):
 			os.system(cmd)
 			cmd = "mv -f ./protocol.h " + gen_dir + "protocol.h"
 			os.system(cmd)
-			cmd = "sed -i '/add get_type/itemplate<> int get_type<" + real_name  + "::Req>() { return message_" + real_name + "_Req_; }' " + gen_dir + "protocol.h"
+
+			cmd = "sed /\"return message_" + real_name + "\"/d " + gen_dir + "protocol.cpp > protocol.cpp"
+			print cmd
 			os.system(cmd)
-			cmd = "sed -i '/add get_type/itemplate<> int get_type<" + real_name  + "::Res>() { return message_" + real_name + "_Res_; }' " + gen_dir + "protocol.h"
+			cmd = "mv -f ./protocol.cpp " + gen_dir + "protocol.cpp"
 			os.system(cmd)
+
+			cmd = "sed -i '/add get_type/itemplate<> int get_type<" + real_name  + "::Req>();' " + gen_dir + "protocol.h"
+			os.system(cmd)
+
+			cmd = "sed -i '/add_get_type/itemplate<> int get_type<" + real_name  + "::Req>() { return message_" + real_name + "_Req_; }' " + gen_dir + "protocol.cpp"
+			os.system(cmd)
+
+			cmd = "sed -i '/add get_type/itemplate<> int get_type<" + real_name  + "::Res>();' " + gen_dir + "protocol.h"
+			os.system(cmd)
+
+			cmd = "sed -i '/add_get_type/itemplate<> int get_type<" + real_name  + "::Res>() { return message_" + real_name + "_Res_; }' " + gen_dir + "protocol.cpp"
+			os.system(cmd)
+
 			# cpp
 			cmd = "sed /" + real_name + ".pb.h/d " + gen_dir + "protocol.h > protocol.h"
 			os.system(cmd)
@@ -105,14 +120,14 @@ def gen_proto_code(file_name):
 			os.system(cmd)
 
 			regist_req = "net::regist_msg_processer(get_type<" + real_name  + "::Req>(), &" + fun_name_req + ", &" + delete_fun_name_req  + ",&" + process_req + ");" 
-			cmd = "sed /get_type\<" + real_name + "::Req/d " + gen_dir + "protocol.cpp > ./protocol.cpp"
+			cmd = "sed /\(get_type\<" + real_name + "::Req/d " + gen_dir + "protocol.cpp > ./protocol.cpp"
 			os.system(cmd)
 			cmd = "mv -f ./protocol.cpp " + gen_dir + "protocol.cpp"
 			os.system(cmd)
 			cmd = "sed -i '/regist msg/i" + regist_req + "' " + gen_dir + "protocol.cpp"
 			os.system(cmd)
 			regist_res = "net::regist_msg_processer(get_type<" + real_name  + "::Res>(), &" + fun_name_res + ", &" + delete_fun_name_res + ",&"  + process_res + ");" 
-			cmd = "sed /get_type\<" + real_name + "::Res/d " + gen_dir + "protocol.cpp > ./protocol.cpp"
+			cmd = "sed /\(get_type\<" + real_name + "::Res/d " + gen_dir + "protocol.cpp > ./protocol.cpp"
 			os.system(cmd)
 			cmd = "mv -f ./protocol.cpp " + gen_dir + "protocol.cpp"
 			os.system(cmd)
@@ -143,7 +158,7 @@ def gen_proto_code(file_name):
 
 			for d in gen_msg_file_dirs:
 				file_path = d + real_name + ".cpp"
-				if True:
+				if False:
 					try:
 						os.remove(file_path)
 					except Exception,e:

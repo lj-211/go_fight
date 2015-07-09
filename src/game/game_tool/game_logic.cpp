@@ -4,6 +4,8 @@
 #include "net/go_net.h"
 #include "thread/thread_util.h"
 
+#include "protocol.h"
+
 #include "LuaBridge/LuaBridge.h"
 #include "hiredis/hiredis.h"
 
@@ -35,8 +37,31 @@ void regist_game_config(lua_State* state) {
 
 GameConfig s_game_config;
 GameInternalConfig s_game_internal_config;
+
+MAP(int, uint64_t) s_connections_to_me;
+
+DEQUE(net::MsgNode*) s_recv_msgs;
 } // annoymous namespace
 
+bool register_server(int id, uint64_t conn) {
+	MAP(int, uint64_t)::iterator iter = s_connections_to_me.find(id);
+	if (iter != s_connections_to_me.end()) {
+		ERROR_LOG("ID为%d的服务器连接已经存在于列表中,不可注册", id);
+		return false;
+	}
+
+	s_connections_to_me[id] = conn;
+	return true;
+}
+
+void disconnect_server(int id) {
+	MAP(int, uint64_t)::iterator iter = s_connections_to_me.find(id);
+	if (iter != s_connections_to_me.end()) {
+		s_connections_to_me.erase(iter);
+	} else {
+		ERROR_LOG("ID为%d的服务器连接不在管理中,请检查是否已释放", id);
+	}
+}
 
 bool init_lua_config() {
 	bool ret = true;
@@ -154,6 +179,8 @@ bool init_config() {
 			break;
 		}
 
+		protocol_init();
+
 		// 这里暂时将服务器状态置为初始化完成
 		// 实际需要和DB进行完全数据通信完成后
 		set_init_ok(true);
@@ -166,7 +193,19 @@ bool init_config() {
 
 void logic_update(time_t now, time_t delta) {
 	usleep(2000 * 1000);
-	ERROR_LOG("%s", "请注意,这是GS的测试主循环日志,请删除我...");
+	
+	// 1. process msg
+	net::get_net_msgs(s_recv_msgs);	
+	if (s_recv_msgs.size() > 0) {
+		DEBUG_LOG("收到网络消息%d", s_recv_msgs.size());
+	}
+	while (s_recv_msgs.size() > 0) {
+		net::MsgNode* msg_node = s_recv_msgs.front();
+		s_recv_msgs.pop_front();
+	
+		// delete msg node in message_process
+		net::message_process(msg_node);
+	}
 }
 
 void deinit_all() {

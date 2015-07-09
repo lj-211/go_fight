@@ -26,7 +26,6 @@ CPPFLAGS	:= \
 	-DELF_HAVE_PRAGMA_ONCE \
 	-DELF_USE_ALL
 LIBS		:= \
-	-lprotocol \
 	-llog4cplus \
 	-levent_core \
 	-lprotobuf \

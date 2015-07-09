@@ -1,0 +1,8 @@
+message Regist {
+	message Req {
+		required int32 my_id = 1;
+	}
+	message Res {
+		required int32 code = 1;
+	}
+}

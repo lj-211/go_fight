@@ -14,4 +14,10 @@ typedef void (*log_trace)(const char*);
 typedef void (*log_error_raw)(const char*, int, const char*, ...);
 typedef void (*log_trace_raw)(const char*, int, const char*, ...);
 
+// xxxx000
+// 后三位为单服务器递增id
+#define DB_SERVER 8
+#define GAME_SERVER 16
+#define GATE_SERVER 32
+
 #endif

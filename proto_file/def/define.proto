@@ -2,4 +2,6 @@ enum MessageType {
 	message_Shutdown_Req_ = 0;
 	message_Shutdown_Res_ = 1;
 	message_begin_ = 20000;
+	message_Regist_Req_ = 20001;
+	message_Regist_Res_ = 20002;
 }

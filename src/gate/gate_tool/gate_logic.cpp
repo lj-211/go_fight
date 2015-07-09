@@ -42,8 +42,31 @@ void regist_gate_config(lua_State* state) {
 
 GateConfig s_gate_config;
 
+MAP(int, uint64_t) s_connections_to_me;
+
 DEQUE(net::MsgNode*) s_recv_msgs;
 } // end namespace annoymous
+
+uint64_t s_game_conn = -1;
+
+extern void set_init_ok(bool val);
+void* connect_to_gs(void* arg);
+void regist_to_game();
+void* connector_callback(uint64_t conn, bool is_ok) {
+	ERROR_LOG("收到连接器回调: %lld, 逻辑服务器为: %lld", conn, s_game_conn);
+	if (conn == s_game_conn) {
+		if (is_ok) {
+			TRACE_LOG("连接器连接成功: %lld, 发起注册", conn);
+			set_init_ok(true);
+			regist_to_game();			
+		} else {
+			pthread_t id;
+			thread::create_worker(id, &connect_to_gs, &s_gameser_info);
+		}
+	}
+
+	return NULL;
+}
 
 bool init_lua_config() {
 	bool ret = true;
@@ -131,7 +154,7 @@ bool init_net_config() {
 		if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
 			redis_ret->type != REDIS_REPLY_ERROR) {
 
-			s_gameser_info.gs_port_ = redis_ret->integer;
+			s_gameser_info.gs_port_ = util::str::str_to_int(redis_ret->str);
 			freeReplyObject(redis_ret);
 		} else {
 			init_ok = false;
@@ -162,10 +185,10 @@ bool init_net() {
 	return true;
 }
 
-extern void set_init_ok(bool val);
 void* connect_to_gs(void* arg) {
 	
-	set_init_ok(true);
+	s_game_conn = net::net_connect("GS", s_gameser_info.gs_ip_.c_str(), 
+		s_gameser_info.gs_port_);
 
 	return NULL;
 }
@@ -188,6 +211,7 @@ bool init_config() {
 		}
 
 		protocol_init();
+		net::regist_connector_callback(connector_callback);
 
 		pthread_t id;
 		thread::create_worker(id, &connect_to_gs, &s_gameser_info);
@@ -200,7 +224,6 @@ bool init_config() {
 
 void logic_update(time_t now, time_t delta) {
 	usleep(2000 * 1000);
-	ERROR_LOG("%s", "请注意,这是一条测试日志,请删除我...");
 
 	// 1. process msg
 	net::get_net_msgs(s_recv_msgs);	
