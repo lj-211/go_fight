@@ -36,6 +36,9 @@ void this_is_c_like_fun();
 int _scope_val;
 
 在CPP中,尽量使用匿名空间,少使用静态成员
+
+书写规范:
+使用4个空格代替Tab制表符
 */
 
 #endif
