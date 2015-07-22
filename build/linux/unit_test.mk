@@ -16,6 +16,7 @@ DEBUG		:= YES
 LIBRARY		:= NO
 PROFILE		:= NO
 CFLAGS		:= \
+	-I/usr/include/mysql/ \
 	-I$(ROOTDIR)/include \
 	-I$(ROOTDIR)/include/libevent/include \
 	-I$(ROOTDIR)/include/libevent \

@@ -1,0 +1,13 @@
+# Build and Release Folders
+bin/
+build/linux/.dep/*
+build/linux/.obj/*
+
+# Other files and folders
+.settings/
+*process*
+tags
+
+# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
+# should NOT be excluded as they contain compiler settings and other important
+# information for Eclipse / Flash Builder.

@@ -8,12 +8,12 @@ namespace util {
 namespace file {
 
 bool is_file_exist(const std::string& path) {
-	struct stat buf;
+    struct stat buf;
     if (stat(path.c_str(), &buf) == ENOENT) {
-		return false;
-	}
+        return false;
+    }
 
-	return true;
+    return true;
 }
 
 }

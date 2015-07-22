@@ -16,7 +16,7 @@ bool db_init();
 bool db_deinit();
 
 MYSQL* db_connect(const char* ip, unsigned int port, const char* user,
-	const char* passwd, const char* db);
+    const char* passwd, const char* db);
 
 void db_close(MYSQL* handle);
 

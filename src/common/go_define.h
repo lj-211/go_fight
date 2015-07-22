@@ -5,8 +5,8 @@
 #include "memory/memory_dependency.h"
 
 #define DISALLOW_COPY_AND_ASSIGN(T) \
-	T(const T&); \
-	void operator=(const T&)
+    T(const T&); \
+    void operator=(const T&)
 
 typedef void (*log_error)(const char*);
 typedef void (*log_trace)(const char*);

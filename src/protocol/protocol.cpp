@@ -40,5 +40,5 @@ net::regist_msg_processer(get_type<Regist::Res>(), &new_Regist_res, &delete_Regi
 }
 
 void protocol_deinit() {
-	// no use
+    // no use
 }

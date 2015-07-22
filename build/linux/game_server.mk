@@ -16,6 +16,7 @@ DEBUG		:= YES
 LIBRARY		:= NO
 PROFILE		:= NO
 CFLAGS		:= \
+	-I/usr/include/mysql/ \
 	-I$(ROOTDIR)/include \
 	-I$(ROOTDIR)/include/libevent/include \
 	-I$(ROOTDIR)/include/libevent \
@@ -26,14 +27,14 @@ CPPFLAGS	:= \
 	-DELF_HAVE_PRAGMA_ONCE \
 	-DELF_USE_ALL
 LIBS		:= \
+	$(ROOTDIR)/lib/liblua.a \
 	-llog4cplus \
 	-levent_core \
 	-lprotobuf \
 	-lmysqlclient_r \
 	-lhiredis \
-	-llua \
+	-ldl \
 	-lrt
-STATIC_LIBS := $(ROOTDIR)/lib/liblua.a
 
 ifeq (YES, $(DEBUG))
 	LIBS	+= \

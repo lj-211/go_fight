@@ -1,0 +1,13 @@
+1.lua
+  I.  编译lua
+  II. 替换可执行文件lua luac
+2.redis
+  I.  tar -zxvf redis-3.0.2.tar.gz
+  II. cd redis-3.0.2; make; make install; cd ..
+  III.cd utils; ./install_server.sh
+3.mysql
+  I.  wget http://repo.mysql.com/mysql-community-release-el7-5.noarch.rpm
+  II. rpm -ivh mysql-community-release-el7-5.noarch.rpm
+  III.yum install mysql-community-server
+  IV. rpm -ivh mysql-connector-c-devel-6.1.6-1.el7.x86_64.rpm
+  V.  yum install mysql-connector-c-devel

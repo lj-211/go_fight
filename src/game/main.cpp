@@ -23,55 +23,55 @@ time_t s_last_frame = 0;
 };
 
 void set_init_ok(bool val) {
-	thread::AutoLockMutex lock_run(&s_init_mutex);
-	s_init_ok = val;
+    thread::AutoLockMutex lock_run(&s_init_mutex);
+    s_init_ok = val;
 }
 
 bool is_init_ok() {
-	thread::AutoLockMutex lock_run(&s_init_mutex);
-	return s_init_ok;
+    thread::AutoLockMutex lock_run(&s_init_mutex);
+    return s_init_ok;
 }
 
 void stop_run() {
-	thread::AutoLockMutex lock_run(&s_running_mutex);
-	running = false;
-	TRACE_LOG_NOARG("[process]停止运行进程");
+    thread::AutoLockMutex lock_run(&s_running_mutex);
+    running = false;
+    TRACE_LOG_NOARG("[process]停止运行进程");
 }
 
 bool is_running() {
-	thread::AutoLockMutex lock_run(&s_running_mutex);
-	return running;
+    thread::AutoLockMutex lock_run(&s_running_mutex);
+    return running;
 }
 
 void go_running() {
-	thread::AutoLockMutex lock_run(&s_running_mutex);
-	running = true;
+    thread::AutoLockMutex lock_run(&s_running_mutex);
+    running = true;
 }
 
 int main() {
-	// 1. do_init
-	if (init_system() == false) {
-		ERROR_LOG_NOARG("[process]初始化系统失败");
-		printf("[process]初始化系统失败\n");
-		return -1;
-	}
-	if (init_config() == false) {
-		ERROR_LOG_NOARG("[process]初始化配置失败");
-		printf("[process]初始化配置失败\n");
-		return -1;
-	}
-	// 2. running loop
-	while (is_running()) {
-		time_t now = util::go_time::get_u_time();
-		time_t delta = s_last_frame == 0 ? 0 : (now - s_last_frame);
+    // 1. do_init
+    if (init_system() == false) {
+        ERROR_LOG_NOARG("[process]初始化系统失败");
+        printf("[process]初始化系统失败\n");
+        return -1;
+    }
+    if (init_config() == false) {
+        ERROR_LOG_NOARG("[process]初始化配置失败");
+        printf("[process]初始化配置失败\n");
+        return -1;
+    }
+    // 2. running loop
+    while (is_running()) {
+        time_t now = util::go_time::get_u_time();
+        time_t delta = s_last_frame == 0 ? 0 : (now - s_last_frame);
 
-		if (is_init_ok()) {
-			logic_update(now, delta);
-			s_last_frame = now;
-		} else {
-			usleep(1000 * 1000);
-		}
-	}
-	// 3. de_init
-	deinit_all();
+        if (is_init_ok()) {
+            logic_update(now, delta);
+            s_last_frame = now;
+        } else {
+            usleep(1000 * 1000);
+        }
+    }
+    // 3. de_init
+    deinit_all();
 }

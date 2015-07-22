@@ -25,27 +25,27 @@ void trace_log(const char* filename, const int fileline, const char* format,  ..
 };
 
 #define DEBUG_LOG(format, ...) \
-	logger::debug_log(__FILE__, __LINE__, format, __VA_ARGS__)
+    logger::debug_log(__FILE__, __LINE__, format, __VA_ARGS__)
 
 #define ERROR_LOG(format, ...) \
-	logger::error_log(__FILE__, __LINE__, format, __VA_ARGS__)
+    logger::error_log(__FILE__, __LINE__, format, __VA_ARGS__)
 
 #define INFO_LOG(format, ...) \
-	logger::info_log(__FILE__, __LINE__, format, __VA_ARGS__)
+    logger::info_log(__FILE__, __LINE__, format, __VA_ARGS__)
 
 #define TRACE_LOG(format, ...) \
-	logger::trace_log(__FILE__, __LINE__, format, __VA_ARGS__)
+    logger::trace_log(__FILE__, __LINE__, format, __VA_ARGS__)
 
 #define DEBUG_LOG_NOARG(format) \
-	logger::debug_log(__FILE__, __LINE__, format)
+    logger::debug_log(__FILE__, __LINE__, format)
 
 #define ERROR_LOG_NOARG(format) \
-	logger::error_log(__FILE__, __LINE__, format)
+    logger::error_log(__FILE__, __LINE__, format)
 
 #define INFO_LOG_NOARG(format) \
-	logger::info_log(__FILE__, __LINE__, format)
+    logger::info_log(__FILE__, __LINE__, format)
 
 #define TRACE_LOG_NOARG(format) \
-	logger::trace_log(__FILE__, __LINE__, format)
+    logger::trace_log(__FILE__, __LINE__, format)
 
 #endif

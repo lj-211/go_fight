@@ -11,21 +11,21 @@ namespace util {
 namespace str {
 
 const char* Blank() {
-	return s_blank.c_str();
+    return s_blank.c_str();
 }
 
 const std::string& BlankStr() {
-	return s_blank;
+    return s_blank;
 }
 
 std::string int_to_str(int val) {
-	std::stringstream ss;
-	ss << val;
-	return ss.str();
+    std::stringstream ss;
+    ss << val;
+    return ss.str();
 }
 
 int str_to_int(const char* str) {
-	return atoi(str);
+    return atoi(str);
 }
 
 }
