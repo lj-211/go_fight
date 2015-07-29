@@ -7,6 +7,9 @@ build/linux/.obj/*
 .settings/
 *process*
 tags
+.ycm_extra_conf.py
+.ycm_extra_conf.pyc
+ycmadd.py
 
 # Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
 # should NOT be excluded as they contain compiler settings and other important

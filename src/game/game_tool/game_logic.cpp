@@ -172,6 +172,7 @@ bool init_config() {
 
         if (init_net_config() == false) {
             ERROR_LOG("%s", "初始化GS的网络配置错误");
+            break;
         }
 
         if (init_net() == false) {
