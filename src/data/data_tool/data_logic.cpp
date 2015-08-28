@@ -1,4 +1,3 @@
-#include "game_logic.h"
 #include "logger/logger.h"
 #include "script/lua_script.h"
 #include "utils/str_util.h"
@@ -6,7 +5,8 @@
 #include "thread/thread_util.h"
 #include "go_define.h"
 #include "database/redis/go_redis.h"
-#include "game_redis.h"
+#include "database/mysql/go_db.h"
+#include "data_redis.h"
 #include "protocol.h"
 
 #include "LuaBridge/LuaBridge.h"
@@ -15,64 +15,44 @@
 #include <sstream>
 #include <unistd.h>
 
-struct GameConfig {
+struct DataConfig {
     int server_id_;
     std::string redis_addr_;
     int port_;
 };
 
-struct DataSerInfo {
-    std::string gs_ip_;
-    int gs_port_;
+struct DataInternalConfig {
+    std::string data_ip_;
+    int data_port_;
+    std::string db_ip_;
+    int db_port_;
+    std::string db_user_;
+    std::string db_passwd_;
+    std::string db_;
 };
 
-struct GameInternalConfig {
-    std::string game_ip_;
-    int game_port_;
-};
+MYSQL* g_mysql_handle = NULL;
 
 
 namespace {
-const char* s_config_file = "./script/config/game_init.lua";
+const char* s_config_file = "./script/config/data_init.lua";
 
 void regist_game_config(lua_State* state) {
     luabridge::getGlobalNamespace(state)
-        .beginClass<GameConfig>("GameConfig")
-        .addData("server_id_", &GameConfig::server_id_)
-        .addData("redis_addr_", &GameConfig::redis_addr_)
-        .addData("port_", &GameConfig::port_)
+        .beginClass<DataConfig>("DataConfig")
+        .addData("server_id_", &DataConfig::server_id_)
+        .addData("redis_addr_", &DataConfig::redis_addr_)
+        .addData("port_", &DataConfig::port_)
         .endClass();
 }
 
-GameConfig s_game_config;
-GameInternalConfig s_game_internal_config;
-DataSerInfo s_dataser_info;
+static DataConfig s_data_config;
+static DataInternalConfig s_data_internal_config;
 
 MAP(int, uint64_t) s_connections_to_me;
 
 DEQUE(net::MsgNode*) s_recv_msgs;
 } // annoymous namespace
-
-uint64_t s_data_conn = -1;
-void* connect_to_ds(void* arg);
-void regist_to_data();
-extern void set_init_ok(bool val);
-
-void* connector_callback(uint64_t conn, bool is_ok) {
-    ERROR_LOG("收到连接器回调: %lld, 逻辑服务器为: %lld", conn, s_data_conn);
-    if (conn == s_data_conn) {
-        if (is_ok) {
-            TRACE_LOG("连接器连接成功: %lld, 发起注册", conn);
-            set_init_ok(true);
-            regist_to_data();            
-        } else {
-            pthread_t id;
-            thread::create_worker(id, &connect_to_ds, &s_dataser_info);
-        }
-    }
-
-    return NULL;
-}
 
 bool register_server(int id, uint64_t conn) {
     MAP(int, uint64_t)::iterator iter = s_connections_to_me.find(id);
@@ -102,14 +82,14 @@ bool init_lua_config() {
 
     regist_game_config(vm);
 
-    luabridge::setGlobal(vm, &s_game_config, "s_game_config");
+    luabridge::setGlobal(vm, &s_data_config, "s_data_config");
     if (luaL_dofile(vm, s_config_file) != 0) {
-        ERROR_LOG("[init]初始化GS配置错误,原因是: %s", lua_tostring(vm, -1));
+        ERROR_LOG("[init]初始化DS配置错误,原因是: %s", lua_tostring(vm, -1));
         ret = false;
     } else {
-        TRACE_LOG("[init]初始化GS配置成功,GS id: %d, redis地址: %s, redis端口: %d",
-            s_game_config.server_id_, s_game_config.redis_addr_.c_str(),
-            s_game_config.port_);
+        TRACE_LOG("[init]初始化DS配置成功,网关id: %d, redis地址: %s, redis端口: %d",
+            s_data_config.server_id_, s_data_config.redis_addr_.c_str(),
+            s_data_config.port_);
     }
 
     lua_close(vm);
@@ -118,8 +98,8 @@ bool init_lua_config() {
 }
 
 bool init_net_config() {
-    const char* addr = s_game_config.redis_addr_.c_str();
-    int port = s_game_config.port_;
+    const char* addr = s_data_config.redis_addr_.c_str();
+    int port = s_data_config.port_;
 
     redisContext* redis = NULL;
     redisReply* redis_ret = NULL;
@@ -138,11 +118,11 @@ bool init_net_config() {
     }
 
     std::stringstream name;
-    name << "hget " << "game_" << s_game_config.server_id_ << ":net ";
+    name << "hget " << "data_" << s_data_config.server_id_ << ":net ";
     std::string prefix = name.str();
 
-    s_game_internal_config.game_ip_ = util::str::BlankStr();
-    s_game_internal_config.game_port_ = 0;
+    s_data_internal_config.data_ip_ = util::str::BlankStr();
+    s_data_internal_config.data_port_ = -1;
 
     bool init_ok = true;
     do {
@@ -150,7 +130,7 @@ bool init_net_config() {
         if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
             redis_ret->type != REDIS_REPLY_ERROR) {
 
-            s_game_internal_config.game_ip_ = redis_ret->str;
+            s_data_internal_config.data_ip_ = redis_ret->str;
             freeReplyObject(redis_ret);
         } else {
             init_ok = false;
@@ -160,32 +140,56 @@ bool init_net_config() {
         if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
             redis_ret->type != REDIS_REPLY_ERROR) {
 
-            s_game_internal_config.game_port_ = util::str::str_to_int(redis_ret->str);
+            s_data_internal_config.data_port_ = util::str::str_to_int(redis_ret->str);
             freeReplyObject(redis_ret);
         } else {
             init_ok = false;
         }
-
-        redis_ret = (redisReply*)redisCommand(redis, (prefix + "ds_ip").c_str());
+        redis_ret = (redisReply*)redisCommand(redis, (prefix + "db_ip").c_str());
         if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
             redis_ret->type != REDIS_REPLY_ERROR) {
 
-            s_dataser_info.gs_ip_ = redis_ret->str;
+            s_data_internal_config.db_ip_ = redis_ret->str;
             freeReplyObject(redis_ret);
         } else {
             init_ok = false;
         }
-
-        redis_ret = (redisReply*)redisCommand(redis, (prefix + "ds_port").c_str());
+        redis_ret = (redisReply*)redisCommand(redis, (prefix + "db_port").c_str());
         if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
             redis_ret->type != REDIS_REPLY_ERROR) {
 
-            s_dataser_info.gs_port_ = util::str::str_to_int(redis_ret->str);
+            s_data_internal_config.db_port_ = util::str::str_to_int(redis_ret->str);
             freeReplyObject(redis_ret);
         } else {
             init_ok = false;
         }
+        redis_ret = (redisReply*)redisCommand(redis, (prefix + "db_user").c_str());
+        if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
+            redis_ret->type != REDIS_REPLY_ERROR) {
 
+            s_data_internal_config.db_user_ = redis_ret->str;
+            freeReplyObject(redis_ret);
+        } else {
+            init_ok = false;
+        }
+        redis_ret = (redisReply*)redisCommand(redis, (prefix + "db_passwd").c_str());
+        if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
+            redis_ret->type != REDIS_REPLY_ERROR) {
+
+            s_data_internal_config.db_passwd_ = redis_ret->str;
+            freeReplyObject(redis_ret);
+        } else {
+            init_ok = false;
+        }
+        redis_ret = (redisReply*)redisCommand(redis, (prefix + "db").c_str());
+        if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
+            redis_ret->type != REDIS_REPLY_ERROR) {
+
+            s_data_internal_config.db_ = redis_ret->str;
+            freeReplyObject(redis_ret);
+        } else {
+            init_ok = false;
+        }
     } while (false);
 
     redisFree(redis);
@@ -198,9 +202,9 @@ bool init_net() {
 
     net::NetSetting ns;
     ns.max_connections_ = 1024 * 4;
-    ns.ip_addr_ = s_game_internal_config.game_ip_;
-    ns.listen_port_ = s_game_internal_config.game_port_;
-    // 游戏服务器连接数很少,只使用一个网络线程
+    ns.ip_addr_ = s_data_internal_config.data_ip_;
+    ns.listen_port_ = s_data_internal_config.data_port_;
+    // 数据服务器连接数很少,只使用一个网络线程
     ns.net_thread_num_ = 1;
 
     if (!net::net_pre_set_parameter(ns)) {
@@ -214,28 +218,42 @@ bool init_net() {
     return true;
 }
 
-
-void* connect_to_ds(void* arg) {
+bool init_db() {
     
-    s_data_conn = net::net_connect("DS", s_dataser_info.gs_ip_.c_str(), 
-        s_dataser_info.gs_port_);
+    const char* ip = s_data_internal_config.db_ip_.c_str();
+    unsigned int port = s_data_internal_config.db_port_;
+    const char* user = s_data_internal_config.db_user_.c_str();
+    const char * passwd = s_data_internal_config.db_passwd_.c_str();
+    const char* db = s_data_internal_config.db_.c_str();
 
-    return NULL;
+    g_mysql_handle = go::db_connect(ip, port, user, passwd, db);
+
+    if (g_mysql_handle) {
+        return true;
+    }
+
+    return false;
 }
 
+extern void set_init_ok(bool val);
 bool init_config() {
     do {
         if (init_lua_config() == false) {
-            ERROR_LOG("%s", "初始化GS的lua配置错误");
+            ERROR_LOG("%s", "初始化DS的lua配置错误");
             break;
         }
 
         if (init_net_config() == false) {
-            ERROR_LOG("%s", "初始化GS的网络配置错误");
+            ERROR_LOG("%s", "初始化DS的网络配置错误");
             break;
         }
 
         if (init_net() == false) {
+            ERROR_LOG("%s", "初始化网络失败");
+            break;
+        }
+
+        if (init_db() == false) {
             ERROR_LOG("%s", "初始化网络失败");
             break;
         }
@@ -245,13 +263,7 @@ bool init_config() {
         thread::create_worker(id, &process_redis_thread, NULL);
 
         protocol_init();
-        net::regist_connector_callback(connector_callback);
 
-        pthread_t id_t;
-        thread::create_worker(id_t, &connect_to_ds, &s_dataser_info);
-
-        // 这里暂时将服务器状态置为初始化完成
-        // 实际需要和DB进行完全数据通信完成后
         set_init_ok(true);
 
         return true;

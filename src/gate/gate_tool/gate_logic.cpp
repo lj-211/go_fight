@@ -3,14 +3,10 @@
 #include "utils/str_util.h"
 #include "net/go_net.h"
 #include "thread/thread_util.h"
-#include "utils/str_util.h"
 
 #include "protocol.h"
 
-#include "LuaBridge/LuaBridge.h"
 #include "hiredis/hiredis.h"
-
-#include <sstream>
 #include <unistd.h>
 
 struct GateConfig {
@@ -66,6 +62,26 @@ void* connector_callback(uint64_t conn, bool is_ok) {
     }
 
     return NULL;
+}
+
+bool register_client(int id, uint64_t conn) {
+    MAP(int, uint64_t)::iterator iter = s_connections_to_me.find(id);
+    if (iter != s_connections_to_me.end()) {
+        ERROR_LOG("ID为%d的客户端连接已经存在于列表中,不可注册", id);
+        return false;
+    }
+
+    s_connections_to_me[id] = conn;
+    return true;
+}
+
+void disconnect_client(int id) {
+    MAP(int, uint64_t)::iterator iter = s_connections_to_me.find(id);
+    if (iter != s_connections_to_me.end()) {
+        s_connections_to_me.erase(iter);
+    } else {
+        ERROR_LOG("ID为%d的客户端连接不在管理中,请检查是否已释放", id);
+    }
 }
 
 bool init_lua_config() {
@@ -233,9 +249,19 @@ void logic_update(time_t now, time_t delta) {
     while (s_recv_msgs.size() > 0) {
         net::MsgNode* msg_node = s_recv_msgs.front();
         s_recv_msgs.pop_front();
-    
-        // delete msg node in message_process
-        net::message_process(msg_node);
+
+        // 如果消息来自GS，则发给Client;如果消息来自Client，则发给GS
+        if (msg_node->msg_conn_ == (net::Connection*)s_game_conn) {
+            TRACE_LOG("转发给Client, cid[%lld]", msg_node->cli_conn_);
+            net::net_send(msg_node->cli_conn_, msg_node);
+        } else {
+            TRACE_LOG("转发给GS, cid[%lld]", msg_node->msg_conn_);
+            msg_node->cli_conn_ = (uint64_t)msg_node->msg_conn_;
+            net::net_send(s_game_conn, msg_node);
+
+            // delete msg node in message_process
+            //net::message_process(msg_node);
+        }
     }
 }
 

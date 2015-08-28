@@ -16,7 +16,7 @@ void regist_to_game() {
     req->set_my_id(GATE_SERVER + 1);
     node->msg_conn_ = (net::Connection*)s_game_conn;
 
-    net::net_send(s_game_conn, node);
+    net::net_send(node);
 }
 
 void process_Regist_req(net::MsgNode* msg) {

@@ -15,6 +15,7 @@
 //#include <linux/tcp.h>
 #include <netinet/tcp.h>
 #include <errno.h>
+#include <logger/logger.h>
 
 namespace {
 
@@ -241,16 +242,16 @@ void message_format(struct evbuffer *buffer,
         return;
     }
 
-    // 读取前8个字节
+    // 读取前16个字节
     int sum_size = info->orig_size + info->n_added;
-    if (sum_size > 8) {
-        int n = evbuffer_peek(buffer, 8, NULL, NULL, 0);
+    if (sum_size > 16) {
+        int n = evbuffer_peek(buffer, 16, NULL, NULL, 0);
         if (n <= 0) {
             return;
         }
         struct evbuffer_iovec* vecs = 
             static_cast<evbuffer_iovec*>(GO_MALLOC(sizeof(evbuffer_iovec) * n));
-        evbuffer_peek(buffer, 8, NULL, vecs, n);
+        evbuffer_peek(buffer, 16, NULL, vecs, n);
         
         char tmp_len[4] = {0};
         int sum = 0;
@@ -260,10 +261,10 @@ void message_format(struct evbuffer *buffer,
             //memcpy(tmp_len, buf+4, 4);
             for (size_t j = 0; j < vecs[i].iov_len; ++j) {
                 ++sum;
-                if (sum > 4 && sum < 9) {
-                    memcpy(tmp_len+sum-5, buf+j, 1);
+                if (sum > 12 && sum < 17) {
+                    memcpy(tmp_len+sum-13, buf+j, 1);
                 }
-                if (sum >= 9) {
+                if (sum >= 17) {
                     done = true;
                     break;
                 }
@@ -275,15 +276,17 @@ void message_format(struct evbuffer *buffer,
 
         int msg_len = *((int*)tmp_len);
 
-        if (sum_size < (msg_len + 8)) {
+        if (sum_size < (msg_len + 16)) {
             return;
         }
 
-        char* msg = (char*)GO_MALLOC(8+msg_len);
-        evbuffer_remove(buffer, (void*)msg, msg_len + 8);
+        char* msg = (char*)GO_MALLOC(16+msg_len);
+        evbuffer_remove(buffer, (void*)msg, msg_len + 16);
         do {
             MsgNode* msg_node = GO_NEW(MsgNode);
             msg_node->msg_type_ = *((int*)msg);
+            msg_node->cli_conn_ = *((uint64_t*)(msg+4));
+            TRACE_LOG("[net]cli_conn[%lld]", msg_node->cli_conn_);
             msg_node->msg_conn_ = conn;
             MAP(int, MsgProcesser*)::iterator pro_iter = 
                 s_msg_processers.find(msg_node->msg_type_);
@@ -296,7 +299,7 @@ void message_format(struct evbuffer *buffer,
             }
 
             msg_node->msg_data_ = (*pro_iter->second->nmd_)();
-            msg_node->msg_data_->ParseFromArray(msg+8, msg_len);
+            msg_node->msg_data_->ParseFromArray(msg+16, msg_len);
 
             // 压缩到队列中
             conn->conn_read_msgs_.push_back(msg_node);
@@ -333,6 +336,7 @@ void on_read(Connection* conn) {
             conn_close(conn);
             break;
         } else if (ret < 0) {
+            conn->can_read_ = false;
             if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
                 if (net_log_error) {
                     net_log_error(__FILE__, __LINE__, "[net]读取socket错误,描述符%d,连接信息(ip:%s port:%d),错误原因%s",
@@ -382,14 +386,17 @@ void on_write(Connection* conn) {
         MsgNode* msg_node = conn->conn_write_msgs_.front();
         conn->conn_write_msgs_.pop_front();
         int msg_data_size = msg_node->msg_data_->ByteSize();
-        char* buf = (char*)GO_MALLOC(msg_data_size+8);
+        char* buf = (char*)GO_MALLOC(msg_data_size+16);
         // 1. 写入消息类型
         *((int*)buf) = msg_node->msg_type_;
+        // 3. 写入Client Conn
+        *((uint64_t*)((char*)buf+4)) = msg_node->cli_conn_;
         // 2. 写入消息长度
-        *((int*)((char*)buf+4)) = msg_data_size;
+        *((int*)((char*)buf+12)) = msg_data_size;
+
         // 3. 写入消息内容
-        msg_node->msg_data_->SerializeToArray(buf+8, msg_data_size);
-        evbuffer_add_reference(conn->write_buffer_, buf, msg_data_size+8, free_msg_buf, NULL);
+        msg_node->msg_data_->SerializeToArray(buf+16, msg_data_size);
+        evbuffer_add_reference(conn->write_buffer_, buf, msg_data_size+16, free_msg_buf, NULL);
         // 通过libevent源码分析,Connection释放evbuffer时,会清理引用的
         // 内存块
     }
@@ -792,7 +799,7 @@ void* data_thread_worker(void* ptr) {
 
             conn_iter->second->conn_write_msgs_.push_back(msg_node);
             if (s_debug_net && net_log_trace) {
-                net_log_error(__FILE__, __LINE__, "连接[%s:%d]收到消息", 
+                net_log_trace(__FILE__, __LINE__, "连接[%s:%d]收到消息",
                     conn_iter->second->info_.ip_,
                     conn_iter->second->info_.port_);
             }
@@ -969,9 +976,9 @@ bool setup_thread(ThreadData* td) {
         exit(ES_INIT_FAIL);
     }
 
-    event_set(&td->notify_event_, td->notify_recv_fd_, EV_READ | EV_WRITE | EV_PERSIST, 
+    event_assign(&td->notify_event_, td->event_, td->notify_recv_fd_, EV_READ | EV_WRITE | EV_PERSIST,
         thread_libevent_process, (void*)td);
-    event_base_set(td->event_, &td->notify_event_);
+
     if (event_add(&td->notify_event_, 0) == -1) {
         if (net_log_error) {
             net_log_error(__FILE__, __LINE__, "[net]设置线程事件错误,退出事件");
@@ -1108,7 +1115,7 @@ bool net_init() {
         //     2) xxxx
 
         // 2. 创建主event
-        s_main_base = event_init();
+        s_main_base = event_base_new();
         s_accept_thread_info.base_ = s_main_base;
 
         // 3. 创建监听
@@ -1140,6 +1147,7 @@ bool net_init() {
 MsgNode* get_msgnode(int type) {
     MAP(int, MsgProcesser*)::iterator iter = s_msg_processers.find(type);
     if (iter == s_msg_processers.end()) {
+        ERROR_LOG("[net]没有找到对应消息类型type[%d]", type);
         return NULL;
     }
 
@@ -1150,12 +1158,49 @@ MsgNode* get_msgnode(int type) {
     return ret;
 }
 
-void net_send(uint64_t id, MsgNode* md) {
+MsgNode* get_res_node(int type, MsgNode* msg_req) {
+    if (msg_req == NULL) {
+        return NULL;
+    }
+
+    MAP(int, MsgProcesser*)::iterator iter = s_msg_processers.find(type);
+    if (iter == s_msg_processers.end()) {
+        ERROR_LOG("[net]没有找到对应消息类型type[%d]", type);
+        return NULL;
+    }
+
+    MsgNode* ret = GO_NEW(MsgNode);
+    ret->msg_type_ = type;
+    ret->cli_conn_ = msg_req->cli_conn_;
+    ret->msg_conn_ = msg_req->msg_conn_;
+    ret->msg_data_ = iter->second->nmd_();
+
+    return ret;
+}
+
+void net_send(MsgNode* md) {
     if (md == NULL || md->msg_conn_ == NULL) {
         return;
     }
 
     Connection* conn = md->msg_conn_;
+    ThreadData* td = conn->td_;
+    {
+        thread::AutoLockMutex tmp(&td->write_msgs_lock_);
+        td->td_write_msgs_.push_back(md);
+    }
+}
+
+void net_send(uint64_t cli_conn, MsgNode* md) {
+    if (md == NULL || md->msg_conn_ == NULL) {
+        return;
+    }
+
+    Connection* conn = (Connection*)cli_conn;
+    if (conn == NULL) {
+        return;
+    }
+    md->msg_conn_ = conn;
     ThreadData* td = conn->td_;
     {
         thread::AutoLockMutex tmp(&td->write_msgs_lock_);
@@ -1226,6 +1271,17 @@ uint64_t net_connect(const char* name, const char* ip, int port) {
         close(fd);
 
         return 0;
+    }
+
+    int flags;
+    if ((flags = fcntl(fd, F_GETFL, 0)) < 0 ||
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        close(fd);
+        if (net_log_error) {
+            net_log_error(__FILE__, __LINE__, "[net]设置socket文件描述符为非阻塞失败");
+        }
+
+        return -1;
     }
 
     Connection* new_conn = GO_NEW(Connection);    

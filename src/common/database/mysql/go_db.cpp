@@ -66,8 +66,8 @@ MYSQL* db_connect(const char* ip, unsigned int port, const char* user,
             db, port, NULL, CLIENT_MULTI_STATEMENTS);    
         
         if (return_val == NULL) {
-            ERROR_LOG("连接mysql失败,连接信息 ip:%s port:%d user:%s passwd:%s db:%s",
-                ip, port, user, passwd, db);
+            ERROR_LOG("连接mysql失败,连接信息 ip:%s port:%d user:%s passwd:%s db:%s 失败原因%s",
+                ip, port, user, passwd, db, mysql_error(ret));
             break;
         }
 

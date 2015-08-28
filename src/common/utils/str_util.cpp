@@ -18,7 +18,7 @@ const std::string& BlankStr() {
     return s_blank;
 }
 
-std::string int_to_str(int val) {
+std::string int_to_str(int64_t val) {
     std::stringstream ss;
     ss << val;
     return ss.str();

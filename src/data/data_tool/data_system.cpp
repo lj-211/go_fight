@@ -1,10 +1,6 @@
+#include "data_redis.h"
 #include "logger/logger.h"
-#include "database/redis/go_redis.h"
-#include "game_redis.h"
-
 #include <stdio.h>
-
-
 
 bool init_system() {
     if (logger::init_logger("./config/log.conf") == false) {

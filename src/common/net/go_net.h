@@ -24,9 +24,11 @@ class Connection;
 class MsgNode {
 public:
     int msg_type_;
+    uint64_t cli_conn_;
     int msg_length_;
     MsgData* msg_data_;
     Connection* msg_conn_;
+
 
     MsgNode()
         : msg_data_(NULL),
@@ -62,6 +64,7 @@ enum ConnState {
     CS_WAITING,
     CS_WAITING_DATA,
     CS_CLOSE,
+
     CS_CONNECT
 };
 
@@ -90,12 +93,12 @@ struct Connection {
     int sfd_;
     int sfd_dup_for_write_;
     enum ConnState state_;
-    thread::Mutex state_mutex_;
     // Connection中只有此数据涉及多线程操作
     // 必须通过conn_set_state操作状态
     ConnStat conn_stat_;
     event read_event_;
     bool can_read_;
+    thread::Mutex state_mutex_;
     event write_event_;
     bool can_write_;
     ThreadData* td_;
@@ -159,7 +162,10 @@ struct ThreadData {
 bool net_pre_set_parameter(NetSetting& ns);
 bool net_init();
 MsgNode* get_msgnode(int type);
-void net_send(uint64_t id, MsgNode* md);
+MsgNode* get_res_node(int type, MsgNode* msg_req);
+void net_send(MsgNode* md);
+void net_send(uint64_t cli_conn, MsgNode* md);
+
 void net_deinit();
 
 // 如果返回为0,表示连接错误
