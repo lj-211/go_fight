@@ -4,4 +4,6 @@ enum MessageType {
 	message_begin_ = 20000;
 	message_Regist_Req_ = 20001;
 	message_Regist_Res_ = 20002;
+	message_Echo_Req_ = 20003;
+	message_Echo_Res_ = 20004;
 }

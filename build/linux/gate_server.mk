@@ -33,7 +33,8 @@ LIBS		:= \
 	-lprotobuf \
 	-lmysqlclient_r \
 	-lhiredis \
-	-lrt
+	-lrt \
+	-luuid
 
 ifeq (YES, $(DEBUG))
 	LIBS	+= \
