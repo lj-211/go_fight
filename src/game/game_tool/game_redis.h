@@ -10,4 +10,4 @@ bool get_redis_data(std::string key, ProtoData *pd);
 
 void add_redis_data(RedisData* redis_data);
 void* process_redis_thread(void* prt);
-void redis_cmd(std::string cmd);
+bool redis_cmd(std::string cmd, std::string& response);

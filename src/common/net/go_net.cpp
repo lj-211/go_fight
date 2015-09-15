@@ -16,6 +16,9 @@
 #include <netinet/tcp.h>
 #include <errno.h>
 #include <logger/logger.h>
+#include <protocol.h>
+#include <libevent/evbuffer-internal.h>
+#include "msg/Shutdown.pb.h"
 
 namespace {
 
@@ -100,6 +103,7 @@ void register_thread_init() {
     pthread_cond_signal(&s_init_cond);
     s_init_lock.Release();
 }
+int s_cnt = 0;
 } // end namespace annoymous
 
 namespace net {
@@ -235,6 +239,7 @@ void message_format(struct evbuffer *buffer,
         return;
     }
     Connection* conn = static_cast<Connection*>(arg);
+    // TRACE_LOG("[buffer]orig_size[%d], n_added[%d]", info->orig_size, info->n_added);
     if (buffer != conn->read_buffer_) {
         if (net_log_error) {
             net_log_error(__FILE__, __LINE__, "[net]收到读取Buffer和连接属性不匹配");
@@ -244,7 +249,7 @@ void message_format(struct evbuffer *buffer,
 
     // 读取前16个字节
     int sum_size = info->orig_size + info->n_added;
-    if (sum_size > 16) {
+    while (sum_size > 16) {
         int n = evbuffer_peek(buffer, 16, NULL, NULL, 0);
         if (n <= 0) {
             return;
@@ -275,6 +280,7 @@ void message_format(struct evbuffer *buffer,
         }
 
         int msg_len = *((int*)tmp_len);
+        GO_FREE(vecs);
 
         if (sum_size < (msg_len + 16)) {
             return;
@@ -286,14 +292,16 @@ void message_format(struct evbuffer *buffer,
             MsgNode* msg_node = GO_NEW(MsgNode);
             msg_node->msg_type_ = *((int*)msg);
             msg_node->cli_conn_ = *((uint64_t*)(msg+4));
-            TRACE_LOG("[net]cli_conn[%lld]", msg_node->cli_conn_);
             msg_node->msg_conn_ = conn;
+            DEBUG_LOG("[net]Buffer读出cid[%lld], gsid[%lld],  msg_type[%d], msg_len[%d]",
+                      msg_node->cli_conn_, msg_node->msg_conn_, msg_node->msg_type_, msg_len);
             MAP(int, MsgProcesser*)::iterator pro_iter = 
                 s_msg_processers.find(msg_node->msg_type_);
             if (pro_iter == s_msg_processers.end()) {
                 // 如果是未识别的类型,则断开连接
                 // tag
                 //conn_close(conn);
+                ERROR_LOG("[net]未识别的消息类型，msg_type[%d]", msg_node->msg_type_);
                 GO_DELETE(msg_node, MsgNode);
                 break;
             }
@@ -310,6 +318,7 @@ void message_format(struct evbuffer *buffer,
         } while (false);
 
         GO_FREE(msg);
+        sum_size -= (msg_len + 16);
     }
 }
 
@@ -386,7 +395,8 @@ void on_write(Connection* conn) {
         MsgNode* msg_node = conn->conn_write_msgs_.front();
         conn->conn_write_msgs_.pop_front();
         int msg_data_size = msg_node->msg_data_->ByteSize();
-        char* buf = (char*)GO_MALLOC(msg_data_size+16);
+        char *buf = NULL;
+        buf = (char*)GO_MALLOC(msg_data_size+16);
         // 1. 写入消息类型
         *((int*)buf) = msg_node->msg_type_;
         // 3. 写入Client Conn
@@ -397,6 +407,12 @@ void on_write(Connection* conn) {
         // 3. 写入消息内容
         msg_node->msg_data_->SerializeToArray(buf+16, msg_data_size);
         evbuffer_add_reference(conn->write_buffer_, buf, msg_data_size+16, free_msg_buf, NULL);
+        message_free(msg_node);
+
+//        TRACE_LOG("[net]Buffer写入cid[%lld], gsid[%lld],  msg_type[%d], msg_length[%d], buffer_len[%d]",
+//                  msg_node->cli_conn_, msg_node->msg_conn_, msg_node->msg_type_, msg_data_size,
+//                  conn->write_buffer_->total_len);
+
         // 通过libevent源码分析,Connection释放evbuffer时,会清理引用的
         // 内存块
     }
@@ -429,7 +445,7 @@ void on_write(Connection* conn) {
                     net_log_trace(__FILE__, __LINE__, "发送数据长度为%d", ret);
                 }
                 conn->can_write_ = true;
-                evbuffer_drain(conn->write_buffer_, ret);
+                //evbuffer_drain(conn->write_buffer_, ret);
             }
         }
 
@@ -779,8 +795,8 @@ void* data_thread_worker(void* ptr) {
                 td->thread_connections_.find(key);
             if (conn_iter == td->thread_connections_.end() || conn_iter->second == NULL) {
                 if (net_log_error) {
-                    net_log_error(__FILE__, __LINE__, "[net]查找消息的连接失效,消息类型%d", 
-                        msg_node->msg_type_);
+                    net_log_error(__FILE__, __LINE__, "[net]查找消息的连接失效,消息连接[%lld], 消息类型[%d]",
+                        key, msg_node->msg_type_);
                 }
                 // todo 释放MsgNode
                 MAP(int, MsgProcesser*)::iterator iter = s_msg_processers.find(msg_node->msg_type_);
@@ -859,6 +875,7 @@ void* data_thread_worker(void* ptr) {
             ++io_iter;
         }
         // 3. epoll_wait
+        VECTOR(uint64_t) remove_idss;
         event_base_loop(td->event_, EVLOOP_ONCE | EVLOOP_NONBLOCK);
         // 4. 处理异常连接
         VECTOR(uint64_t) remove_ids;
@@ -866,7 +883,12 @@ void* data_thread_worker(void* ptr) {
         while (tc_iter != td->thread_connections_.end()) {
             if (conn_get_state(tc_iter->second) == CS_CLOSE) {
                 // 给断开的连接增加一个连接断开消息
-                MsgNode* msg_node = GO_NEW(MsgNode);
+                net::MsgNode* msg_node = net::get_msgnode(get_type<Shutdown::Req>());
+                if (msg_node == NULL) {
+                    continue;
+                }
+                Shutdown::Req* req = static_cast<Shutdown::Req*>(msg_node->msg_data_);
+                req->set_code(0);
                 msg_node->msg_type_ = 0;
                 msg_node->msg_conn_ = tc_iter->second;
                 td->td_read_msgs_lock_.Hold();
@@ -1301,14 +1323,21 @@ uint64_t net_connect(const char* name, const char* ip, int port) {
 }
 
 void get_net_msgs(DEQUE(MsgNode*)& output) {
+    int conn_num = 0;
+    s_cnt++;
+
     for (size_t i = 0; i < s_threads_datas.size(); ++i) {
         ThreadData* td = s_threads_datas[i];
         td->td_read_msgs_lock_.Hold();
+        conn_num += td->thread_connections_.size();
         while (td->td_read_msgs_.size() > 0) {
             output.push_back(td->td_read_msgs_.front());
             td->td_read_msgs_.pop_front();
         }
         td->td_read_msgs_lock_.Release();
+    }
+    if (s_cnt % 100 == 0) {
+        TRACE_LOG("[info]总连接数[%d]", conn_num);
     }
 }
 
@@ -1348,6 +1377,24 @@ void message_process(MsgNode* mn) {
                 iter->second->mp_ != NULL)) {
             iter->second->mp_(mn);
         }
+        if (mn->msg_data_) {
+            iter->second->dmd_(mn->msg_data_);
+        }
+        GO_DELETE(mn, MsgNode);
+    }
+}
+
+void message_free(MsgNode* mn) {
+    if (mn == NULL) {
+        return;
+    }
+
+    MAP(int, MsgProcesser*)::iterator iter = s_msg_processers.find(mn->msg_type_);
+    if (iter == s_msg_processers.end()) {
+        if (net_log_error) {
+            net_log_error(__FILE__, __LINE__, "[net]没有处理器的消息类型%d", mn->msg_type_);
+        }
+    } else {
         if (mn->msg_data_) {
             iter->second->dmd_(mn->msg_data_);
         }

@@ -6,7 +6,7 @@
 using namespace ::google::protobuf;
 
 namespace {
-const char* s_data_container_item = "items";
+const char* s_data_container_item = "id";
 
 void set_proto_data(ProtoData* pd, const FieldDescriptor* fdes, const char* val) {
     const Reflection* ref = pd->GetReflection();
@@ -162,6 +162,64 @@ bool db_get_data(MYSQL* handle, const char* cmd, ProtoDataContainer* data) {
 
             free_result:
                 mysql_free_result(res);
+        }
+
+        while (!mysql_next_result(handle)) {
+            res =  mysql_store_result(handle);
+            if (!res) {
+                mysql_free_result(res);
+            }
+        }
+
+        return true;
+
+    } while (false);
+
+    return false;
+}
+
+bool db_get_data_lite(MYSQL* handle, const char* cmd, ProtoDataContainer* data) {
+    if (handle == NULL || cmd == NULL || data == NULL) {
+        return false;
+    }
+    const Descriptor* des = data->GetDescriptor();
+
+    do {
+        int ret = mysql_query(handle, cmd);
+        if (ret != 0) {
+            ERROR_LOG("[db]获取数据库数据错误,命令%s,失败原因%s", cmd, mysql_error(handle));
+        }
+
+        MYSQL_RES* res = mysql_store_result(handle);
+        if (res != NULL) {
+            const int row_num = mysql_num_rows(res);
+            const int field_num = mysql_num_fields(res);
+
+            const Reflection* ref = data->GetReflection();
+            if (ref == NULL) {
+                goto free_result;
+            }
+
+            for (int i = 0; i < row_num; ++i) {
+                const MYSQL_ROW row = mysql_fetch_row(res);
+
+                for (int j = 0; j < field_num; ++j) {
+                    const MYSQL_FIELD *ifd = mysql_fetch_field_direct(res, j);
+                    const FieldDescriptor* item_field_des = des->FindFieldByName(ifd->name);
+                    if (item_field_des == NULL) {
+                        goto free_result;
+                    }
+
+                    if (row[j] == NULL || row[j] == util::str::Blank()) {
+                        set_proto_data(data, item_field_des, "");
+                    } else {
+                        set_proto_data(data, item_field_des, row[j]);
+                    }
+                }
+            }
+
+            free_result:
+            mysql_free_result(res);
         }
 
         while (!mysql_next_result(handle)) {

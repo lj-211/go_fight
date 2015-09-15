@@ -17,13 +17,11 @@ bool redis_init() {
 }
 
 bool set_redis_data(std::string key, ProtoData *pd) {
-    go::redis_set_data(s_redis_handle, key, pd);
-    return true;
+    return go::redis_set_data(s_redis_handle, key, pd);
 }
 
 bool get_redis_data(std::string key, ProtoData *pd) {
-    go::redis_get_data(s_redis_handle, key, pd);
-    return true;
+    return go::redis_get_data(s_redis_handle, key, pd);
 }
 
 void* process_redis_list(redisContext* handle) {
@@ -60,8 +58,7 @@ void add_redis_data(RedisData* redis_data) {
     s_redis_list_lock.Release();
 }
 
-void redis_cmd(std::string cmd) {
-    std::string response;
-    go::redis_cmd(s_redis_handle, cmd, response);
+bool redis_cmd(std::string cmd, std::string& response) {
+    return go::redis_cmd(s_redis_handle, cmd, response);
 
 }

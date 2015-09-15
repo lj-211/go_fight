@@ -136,7 +136,7 @@ bool redis_cmd(redisContext* handle, std::string cmd, std::string &response) {
 
     freeReplyObject(reply);
 
-    TRACE_LOG("[redis]写入成功!, cmd[%s]", cmd.c_str());
+    TRACE_LOG("[redis]执行成功!, cmd[%s]", cmd.c_str());
     return ret;
 }
 

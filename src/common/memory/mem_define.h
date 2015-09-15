@@ -5,7 +5,7 @@
 
 #include <stdio.h>
 
-#define USE_MEM_POOL 1
+#define USE_MEM_POOL 0
 #define USE_MEM_POOL_ALIGN 0
 
 template <typename T>

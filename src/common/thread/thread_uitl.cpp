@@ -36,6 +36,7 @@ bool create_worker(pthread_t& id, void *(*func)(void *), void *arg) {
             snprintf(tmp, 256, "创建线程成功,线程ID: %lld", thread);
             thread_log_trace(tmp);
         }
+        id = thread;
     } while (false);
 
     return ret;

@@ -183,6 +183,7 @@ typedef void (*delete_msg_data)(MsgData* md);
 // 必须处理返回值
 bool regist_msg_processer(int msg_type, new_msg_data init, delete_msg_data deinit, msg_process mp);
 void message_process(MsgNode* mn);
+void message_free(MsgNode* mn);
 } // end namespace net
 
 #endif

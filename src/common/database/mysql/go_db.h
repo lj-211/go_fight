@@ -26,6 +26,7 @@ bool db_exe(MYSQL* handle, const char* cmd);
 // 因为启用了多语句查询
 // 本接口只处理第一条的结果
 bool db_get_data(MYSQL* handle, const char* cmd, ProtoDataContainer* data);
+bool db_get_data_lite(MYSQL* handle, const char* cmd, ProtoDataContainer* data);
 
 } // end namespace go
 

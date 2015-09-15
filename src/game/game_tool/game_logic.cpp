@@ -261,7 +261,7 @@ bool init_config() {
 }
 
 void logic_update(time_t now, time_t delta) {
-    usleep(2000 * 1000);
+    usleep(20 * 1000);
     
     // 1. process msg
     net::get_net_msgs(s_recv_msgs);    

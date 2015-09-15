@@ -43,11 +43,12 @@ MAP(int, uint64_t) s_connections_to_me;
 DEQUE(net::MsgNode*) s_recv_msgs;
 } // end namespace annoymous
 
-uint64_t s_game_conn = -1;
+uint64_t s_game_conn = 0;
 
 extern void set_init_ok(bool val);
 void* connect_to_gs(void* arg);
 void regist_to_game();
+void connect_gs();
 void* connector_callback(uint64_t conn, bool is_ok) {
     ERROR_LOG("收到连接器回调: %lld, 逻辑服务器为: %lld", conn, s_game_conn);
     if (conn == s_game_conn) {
@@ -56,8 +57,7 @@ void* connector_callback(uint64_t conn, bool is_ok) {
             set_init_ok(true);
             regist_to_game();            
         } else {
-            pthread_t id;
-            thread::create_worker(id, &connect_to_gs, &s_gameser_info);
+            connect_gs();
         }
     }
 
@@ -202,10 +202,11 @@ bool init_net() {
 }
 
 void* connect_to_gs(void* arg) {
-    
-    s_game_conn = net::net_connect("GS", s_gameser_info.gs_ip_.c_str(), 
-        s_gameser_info.gs_port_);
-
+while (!s_game_conn) {
+        s_game_conn = net::net_connect("GS", s_gameser_info.gs_ip_.c_str(),
+                                       s_gameser_info.gs_port_);
+        usleep(2000*1000);
+    }
     return NULL;
 }
 
@@ -229,8 +230,7 @@ bool init_config() {
         protocol_init();
         net::regist_connector_callback(connector_callback);
 
-        pthread_t id;
-        thread::create_worker(id, &connect_to_gs, &s_gameser_info);
+        connect_gs();
 
         return true;
     } while (false);
@@ -239,7 +239,7 @@ bool init_config() {
 }
 
 void logic_update(time_t now, time_t delta) {
-    usleep(2000 * 1000);
+    usleep(20 * 1000);
 
     // 1. process msg
     net::get_net_msgs(s_recv_msgs);    
@@ -252,19 +252,32 @@ void logic_update(time_t now, time_t delta) {
 
         // 如果消息来自GS，则发给Client;如果消息来自Client，则发给GS
         if (msg_node->msg_conn_ == (net::Connection*)s_game_conn) {
-            TRACE_LOG("转发给Client, cid[%lld]", msg_node->cli_conn_);
-            net::net_send(msg_node->cli_conn_, msg_node);
+            if (msg_node->msg_type_ != 0) {
+                TRACE_LOG("转发给Client, cid[%lld]", msg_node->cli_conn_);
+                net::net_send(msg_node->cli_conn_, msg_node);
+            } else {
+                s_game_conn = 0;
+                net::message_process(msg_node);
+            }
         } else {
-            TRACE_LOG("转发给GS, cid[%lld]", msg_node->msg_conn_);
-            msg_node->cli_conn_ = (uint64_t)msg_node->msg_conn_;
+            if (msg_node->msg_type_ == 0) {
+                TRACE_LOG("客户端断开，连接[%lld]", msg_node->msg_conn_);
+            }
+            TRACE_LOG("转发给GS, cid[%lld], gsid[%lld]", msg_node->msg_conn_, s_game_conn);
+            msg_node->cli_conn_ = (uint64_t) msg_node->msg_conn_;
             net::net_send(s_game_conn, msg_node);
 
-            // delete msg node in message_process
-            //net::message_process(msg_node);
         }
+        // delete msg node in message_process
+        // net::message_process(msg_node);
     }
 }
 
 void deinit_all() {
     TRACE_LOG("%s", "退出程序");
+}
+
+void connect_gs() {
+    pthread_t id;
+    thread::create_worker(id, &connect_to_gs, &s_gameser_info);
 }

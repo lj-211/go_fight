@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
+#include <signal.h>
 
 extern bool init_system();
 extern bool init_config();
@@ -60,6 +61,9 @@ int main() {
         printf("[process]初始化配置失败\n");
         return -1;
     }
+
+    signal(SIGPIPE, SIG_IGN);
+
     // 2. running loop
     while (is_running()) {
         time_t now = util::go_time::get_u_time();
