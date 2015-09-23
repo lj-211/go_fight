@@ -24,6 +24,7 @@ namespace {
 const char* s_config_file = "./script/config/gate_init.lua";
 std::string s_server_net_ip = "";
 int s_server_port = 0;
+int s_net_thread_num = 1;
 
 GameSerInfo s_gameser_info;
 
@@ -156,6 +157,16 @@ bool init_net_config() {
             init_ok = false;
         }
 
+        redis_ret = (redisReply*)redisCommand(redis, (prefix + "net_thread_num").c_str());
+        if (redis_ret && redis_ret->type != REDIS_REPLY_NIL &&
+            redis_ret->type != REDIS_REPLY_ERROR) {
+
+            s_net_thread_num = util::str::str_to_int(redis_ret->str);
+            freeReplyObject(redis_ret);
+        } else {
+            init_ok = false;
+        }
+
         redis_ret = (redisReply*)redisCommand(redis, (prefix + "gs_ip").c_str());
         if (redis_ret && redis_ret->type != REDIS_REPLY_NIL && 
             redis_ret->type != REDIS_REPLY_ERROR) {
@@ -189,6 +200,7 @@ bool init_net() {
     ns.max_connections_ = 1024 * 4;
     ns.ip_addr_ = s_server_net_ip;
     ns.listen_port_ = s_server_port;
+    ns.net_thread_num_ = s_net_thread_num;
 
     if (!net::net_pre_set_parameter(ns)) {
         return false;
@@ -244,7 +256,7 @@ void logic_update(time_t now, time_t delta) {
     // 1. process msg
     net::get_net_msgs(s_recv_msgs);    
     if (s_recv_msgs.size() > 0) {
-        DEBUG_LOG("收到网络消息%d", s_recv_msgs.size());
+    //    DEBUG_LOG("收到网络消息%d", s_recv_msgs.size());
     }
     while (s_recv_msgs.size() > 0) {
         net::MsgNode* msg_node = s_recv_msgs.front();
@@ -253,7 +265,7 @@ void logic_update(time_t now, time_t delta) {
         // 如果消息来自GS，则发给Client;如果消息来自Client，则发给GS
         if (msg_node->msg_conn_ == (net::Connection*)s_game_conn) {
             if (msg_node->msg_type_ != 0) {
-                TRACE_LOG("转发给Client, cid[%lld]", msg_node->cli_conn_);
+        //        TRACE_LOG("转发给Client, cid[%lld]", msg_node->cli_conn_);
                 net::net_send(msg_node->cli_conn_, msg_node);
             } else {
                 s_game_conn = 0;
@@ -263,7 +275,7 @@ void logic_update(time_t now, time_t delta) {
             if (msg_node->msg_type_ == 0) {
                 TRACE_LOG("客户端断开，连接[%lld]", msg_node->msg_conn_);
             }
-            TRACE_LOG("转发给GS, cid[%lld], gsid[%lld]", msg_node->msg_conn_, s_game_conn);
+         //   TRACE_LOG("转发给GS, cid[%lld], gsid[%lld]", msg_node->msg_conn_, s_game_conn);
             msg_node->cli_conn_ = (uint64_t) msg_node->msg_conn_;
             net::net_send(s_game_conn, msg_node);
 

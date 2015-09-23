@@ -11,7 +11,7 @@ import io
 gen_dir = "../src/protocol/"
 proto_dir = "../proto_file/"
 cur_pwd = os.getcwd() + "/"
-gen_msg_file_dirs = ["../src/gate/msg_process/", "../src/game/msg_process/"]
+gen_msg_file_dirs = ["../src/gate/msg_process/", "../src/game/msg_process/", "../src/data/msg_process/"]
 
 # 删除协议相关代码
 def delete_proto_code(proto_name):

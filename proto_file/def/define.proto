@@ -6,4 +6,6 @@ enum MessageType {
 	message_Regist_Res_ = 20002;
 	message_Echo_Req_ = 20003;
 	message_Echo_Res_ = 20004;
+	message_GetRole_Req_ = 20005;
+	message_GetRole_Res_ = 20006;
 }

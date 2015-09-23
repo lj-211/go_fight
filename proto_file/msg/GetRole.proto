@@ -1,0 +1,11 @@
+import "def/Role.proto";
+
+message GetRole {
+    message Req {
+        required string rid = 1;
+    }
+    message Res {
+        required int32 code = 1;
+        optional Role role = 2;
+    }
+}

@@ -34,7 +34,8 @@ LIBS		:= \
 	-lmysqlclient_r \
 	-lhiredis \
 	-lrt \
-	-luuid
+	-luuid \
+	-ltcmalloc
 
 ifeq (YES, $(DEBUG))
 	LIBS	+= \

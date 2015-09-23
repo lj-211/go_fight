@@ -26,7 +26,8 @@ CPPFLAGS	:= \
 	-DELF_USE_ALL
 LIBS		:= \
 	-lprotobuf \
-	-lrt
+	-lrt \
+	-ltcmalloc
 STATIC_LIBS := 
 
 LDFLAGS		:= \

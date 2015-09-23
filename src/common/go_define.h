@@ -2,7 +2,6 @@
 #define GO_DEFINE_H
 
 #include "memory/mem_define.h"
-#include "memory/memory_dependency.h"
 #include "google/protobuf/message.h"
 
 #define DISALLOW_COPY_AND_ASSIGN(T) \

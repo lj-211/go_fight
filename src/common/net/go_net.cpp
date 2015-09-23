@@ -279,7 +279,9 @@ void message_format(struct evbuffer *buffer,
             }
         }
 
-        int msg_len = *((int*)tmp_len);
+        // i_tmp_len为解决编译告警
+        int *i_tmp_len = (int*)tmp_len;
+        int msg_len = *i_tmp_len;
         GO_FREE(vecs);
 
         if (sum_size < (msg_len + 16)) {
@@ -293,8 +295,8 @@ void message_format(struct evbuffer *buffer,
             msg_node->msg_type_ = *((int*)msg);
             msg_node->cli_conn_ = *((uint64_t*)(msg+4));
             msg_node->msg_conn_ = conn;
-            DEBUG_LOG("[net]Buffer读出cid[%lld], gsid[%lld],  msg_type[%d], msg_len[%d]",
-                      msg_node->cli_conn_, msg_node->msg_conn_, msg_node->msg_type_, msg_len);
+            DEBUG_LOG("[net]Buffer读出cid[%lld], gsid[%lld],  msg_type[%d], msg_len[%d], port[%d]",
+                      msg_node->cli_conn_, msg_node->msg_conn_, msg_node->msg_type_, msg_len, msg_node->msg_conn_->info_.port_);
             MAP(int, MsgProcesser*)::iterator pro_iter = 
                 s_msg_processers.find(msg_node->msg_type_);
             if (pro_iter == s_msg_processers.end()) {
@@ -312,8 +314,8 @@ void message_format(struct evbuffer *buffer,
             // 压缩到队列中
             conn->conn_read_msgs_.push_back(msg_node);
             if (s_debug_net && net_log_trace) {
-                net_log_trace(__FILE__, __LINE__, "网络层收到[%s:%d]的消息%d", conn->info_.ip_, 
-                    conn->info_.port_, msg_node->msg_type_);
+//                net_log_trace(__FILE__, __LINE__, "网络层收到[%s:%d]的消息%d", conn->info_.ip_,
+//                    conn->info_.port_, msg_node->msg_type_);
             }
         } while (false);
 
@@ -334,8 +336,11 @@ void on_read(Connection* conn) {
 
     do {
         int fd = conn->sfd_;
-        // -1 means read as many as it can
+		// -1 means read as many as it can
+//        net_log_trace(__FILE__, __LINE__, "将接收数据，发送连接[%s:%d]",
+//                      conn->info_.ip_, conn->info_.port_);
         int ret = evbuffer_read(conn->read_buffer_, fd, -1);
+
         // EOF
         if (ret == 0) {
             if (net_log_error) {
@@ -364,6 +369,8 @@ void on_read(Connection* conn) {
                 }
             }
         } else {
+//            net_log_trace(__FILE__, __LINE__, "接收数据长度为%d, 发送连接[%s:%d]",
+//                          ret, conn->info_.ip_, conn->info_.port_);
             conn->can_read_ = true;
         }
 
@@ -442,7 +449,8 @@ void on_write(Connection* conn) {
                 }
             } else {
                 if (s_debug_net && net_log_trace) {
-                    net_log_trace(__FILE__, __LINE__, "发送数据长度为%d", ret);
+                    net_log_trace(__FILE__, __LINE__, "发送数据长度为%d, 接收连接[%s:%d]",
+                                  ret, conn->info_.ip_, conn->info_.port_);
                 }
                 conn->can_write_ = true;
                 //evbuffer_drain(conn->write_buffer_, ret);
@@ -815,9 +823,9 @@ void* data_thread_worker(void* ptr) {
 
             conn_iter->second->conn_write_msgs_.push_back(msg_node);
             if (s_debug_net && net_log_trace) {
-                net_log_trace(__FILE__, __LINE__, "连接[%s:%d]收到消息",
-                    conn_iter->second->info_.ip_,
-                    conn_iter->second->info_.port_);
+//                net_log_trace(__FILE__, __LINE__, "连接[%s:%d]收到消息",
+//                    conn_iter->second->info_.ip_,
+//                    conn_iter->second->info_.port_);
             }
         }
         td->write_msgs_lock_.Release();
@@ -875,7 +883,6 @@ void* data_thread_worker(void* ptr) {
             ++io_iter;
         }
         // 3. epoll_wait
-        VECTOR(uint64_t) remove_idss;
         event_base_loop(td->event_, EVLOOP_ONCE | EVLOOP_NONBLOCK);
         // 4. 处理异常连接
         VECTOR(uint64_t) remove_ids;
@@ -1336,8 +1343,8 @@ void get_net_msgs(DEQUE(MsgNode*)& output) {
         }
         td->td_read_msgs_lock_.Release();
     }
-    if (s_cnt % 100 == 0) {
-        TRACE_LOG("[info]总连接数[%d]", conn_num);
+    if (s_cnt % 100000 == 0) {
+        //TRACE_LOG("[info]总连接数[%d]", conn_num);
     }
 }
 
